@@ -1,0 +1,31 @@
+import { claimDueSchedules, prepareClaimedSearchRun, recordWorkflowDispatch } from "@jobpilot/db/dispatcher";
+import { searchRunWorkflow } from "@jobpilot-workflows/search-run";
+import { start } from "workflow/api";
+
+export async function GET(request: Request) {
+  if (!isAuthorizedCronRequest(request)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const claimed = await claimDueSchedules({ now: new Date(), limit: 25 });
+  const started: Array<{ runId: string; workflowRunId: string }> = [];
+  for (const schedule of claimed) {
+    const prepared = await prepareClaimedSearchRun(schedule);
+    if (!prepared.shouldStart) continue;
+
+    const workflow = await start(searchRunWorkflow, [prepared.runId], {
+      attributes: {
+        jobpilotRunId: prepared.runId,
+        jobpilotTenantId: schedule.tenantId,
+      },
+    });
+    await recordWorkflowDispatch({ runId: prepared.runId, workflowRunId: workflow.runId });
+    started.push({ runId: prepared.runId, workflowRunId: workflow.runId });
+  }
+  return Response.json({ claimed: claimed.length, started });
+}
+
+function isAuthorizedCronRequest(request: Request) {
+  const secret = process.env.CRON_SECRET;
+  return Boolean(secret) && request.headers.get("authorization") === `Bearer ${secret}`;
+}

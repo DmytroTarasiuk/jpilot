@@ -1,5 +1,7 @@
 minimumReleaseAge: 0
 minimumReleaseAgeStrict: true
 allowBuilds:
+  '@swc/core': true
+  cbor-extract: true
   esbuild: true
   sharp: false

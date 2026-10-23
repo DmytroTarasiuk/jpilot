@@ -1,15 +1,32 @@
-import { eveChannel } from "eve/channels/eve";
-import { localDev, placeholderAuth, vercelOidc } from "eve/channels/auth";
+import { defaultEveAuth, eveChannel } from "eve/channels/eve";
+import { localDev, vercelOidc } from "eve/channels/auth";
+import { clerkAppAuth } from "../../lib/auth/clerk-agent";
+import { bindAgentSession } from "../../lib/db/tenancy";
 
 export default eveChannel({
   auth: [
-    // Lets the eve TUI and your Vercel deployments reach the deployed agent.
+    // Browser users authenticate through Clerk. The verifier also enforces session ownership.
+    clerkAppAuth(),
+    // Trusted deployment-to-deployment calls use Vercel OIDC.
     vercelOidc(),
-    // Open on localhost for `eve dev` and the REPL; ignored in production.
+    // This fallback is active only in an actual local development runtime.
     localDev(),
-    // This placeholder will not allow browser requests in production.
-    // Replace it with your app's auth provider, like Auth.js or Clerk,
-    // or use none() for a public demo.
-    placeholderAuth(),
   ],
+  onMessage(ctx) {
+    return { auth: defaultEveAuth(ctx), clientContext: [] };
+  },
+  events: {
+    async "turn.started"(_event, _channel, ctx) {
+      const caller = ctx.session.auth.current;
+      const tenantId = caller?.attributes.tenantId;
+      const userId = caller?.attributes.appUserId;
+      if (
+        caller?.principalType === "user" &&
+        typeof tenantId === "string" &&
+        typeof userId === "string"
+      ) {
+        await bindAgentSession({ sessionId: ctx.session.id, tenantId, userId });
+      }
+    },
+  },
 });

@@ -7,25 +7,70 @@
     "#evals/*": "./evals/*"
   },
   "scripts": {
-    "build": "eve build",
+    "build": "pnpm build:agent && pnpm build:web",
+    "build:agent": "eve build",
+    "build:web": "cd apps/web && next build",
     "deploy": "eve deploy",
     "dev": "eve dev",
+    "dev:web": "cd apps/web && next dev",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "eval": "eve eval",
     "start": "eve start",
-    "typecheck": "tsc"
+    "test": "vitest run",
+    "typecheck": "pnpm typecheck:agent && pnpm typecheck:web",
+    "typecheck:agent": "tsc --noEmit -p tsconfig.json",
+    "typecheck:web": "tsc --noEmit -p apps/web/tsconfig.json"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1156.0",
+    "@aws-sdk/s3-request-presigner": "^3.1156.0",
+    "@clerk/backend": "^3.26.2",
+    "@clerk/nextjs": "^7.9.20",
+    "@js-temporal/polyfill": "^0.5.1",
+    "@neondatabase/serverless": "^1.2.0",
+    "@radix-ui/react-use-controllable-state": "1.2.2",
+    "@shadcn/react": "0.3.1",
+    "@shikijs/core": "3.23.0",
+    "@shikijs/engine-javascript": "3.23.0",
+    "@shikijs/engine-oniguruma": "3.23.0",
+    "@streamdown/cjk": "1.0.3",
+    "@streamdown/code": "1.1.1",
+    "@streamdown/math": "1.0.2",
+    "@streamdown/mermaid": "1.0.2",
+    "@tailwindcss/postcss": "4.3.0",
     "@vercel/connect": "2.5.2",
     "ai": "^7.0.137",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "cmdk": "1.1.1",
+    "drizzle-orm": "^0.45.4",
     "eve": "^0.82.0",
+    "lucide-react": "1.16.0",
+    "motion": "12.40.0",
+    "nanoid": "5.1.11",
+    "next": "16.3.6",
+    "radix-ui": "1.4.3",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "server-only": "^0.0.1",
+    "shiki": "3.23.0",
+    "streamdown": "2.5.0",
+    "tailwind-merge": "3.6.0",
+    "tailwindcss": "4.3.0",
+    "use-stick-to-bottom": "1.1.4",
+    "workflow": "^5.2.3",
     "zod": "4.5.4"
   },
   "devDependencies": {
-    "@types/node": "24.x",
-    "typescript": "7.0.2"
+    "@types/node": "~26.6.5",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "6.0.3",
+    "vitest": "^5.0.5"
   },
   "engines": {
     "node": "24.x"
   }
-
 }
