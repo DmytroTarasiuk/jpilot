@@ -45,12 +45,12 @@ export const platformCatalog: readonly PlatformCatalogEntry[] = [
   {
     key: "djinni",
     name: "Djinni",
-    description: "First-party discovery and messaging capabilities must be verified before connection.",
-    availability: "planned",
-    supportedCapabilities: { discover: false, prepare: true, submit: false, track: false },
+    description: "Discovery uses Djinni's first-party public RSS feed. Applications remain manual.",
+    availability: "available",
+    supportedCapabilities: { discover: true, prepare: false, submit: false, track: false },
   },
 ] as const;
 
 // A platform is runnable only after a permitted production adapter ships.
 // This deliberately stays separate from user-controlled integration records.
-export const implementedDiscoveryPlatforms = new Set<PlatformKey>();
+export const implementedDiscoveryPlatforms = new Set<PlatformKey>(["djinni"]);

@@ -150,7 +150,7 @@ export function ScheduleBuilder({ initialSchedules }: { initialSchedules: Schedu
       const result = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) throw new Error(result?.error ?? "The run could not be queued.");
       setState("saved");
-      setMessage("Manual run queued. It will report waiting until a discovery integration is connected.");
+      setMessage("Manual run queued. Connected discovery sources will be processed.");
       router.refresh();
     } catch (error) {
       setState("error");

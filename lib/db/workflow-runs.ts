@@ -105,11 +105,17 @@ async function finalizeRun(input: {
     .limit(1);
   if (!run) return false;
 
+  const counters =
+    input.status === "failed"
+      ? { ...run.counters, failed: Math.max(1, run.counters.failed ?? 0) }
+      : run.counters;
+
   await db
     .update(searchRuns)
     .set({
       status: input.status,
       failureCode: input.failureCode,
+      counters,
       completedAt: new Date(),
       updatedAt: new Date(),
     })

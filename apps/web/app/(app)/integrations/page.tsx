@@ -2,6 +2,7 @@ import { getAuthenticatedTenantIdentity } from "@jobpilot/auth/request-context";
 import { listPlatformIntegrations } from "@jobpilot/db/integrations";
 import { CircleDashedIcon } from "lucide-react";
 import { redirect } from "next/navigation";
+import { updateDjinniConnection } from "./actions";
 
 export default async function IntegrationsPage() {
   const identity = await getAuthenticatedTenantIdentity();
@@ -29,13 +30,22 @@ export default async function IntegrationsPage() {
             <div className="mt-4 flex flex-wrap gap-2">
               {Object.entries(platform.supportedCapabilities).map(([capability, supported]) => (
                 <span className={`rounded-full px-2.5 py-1 text-xs capitalize ${supported ? "bg-[#e9f2e9] text-[#315b45]" : "bg-[#f3f4f2] text-[#8a928d]"}`} key={capability}>
-                  {capability}: {supported ? "planned" : "unavailable"}
+                  {capability}: {supported ? platform.availability === "available" ? "available" : "planned" : "unavailable"}
                 </span>
               ))}
             </div>
-            <button className="mt-5 rounded-full border px-4 py-2 text-sm font-medium opacity-50" disabled type="button">
-              {platform.availability === "available" ? "Connect" : "Coming in Phase 2"}
-            </button>
+            {platform.key === "djinni" && platform.availability === "available" ? (
+              <form action={updateDjinniConnection}>
+                <input name="intent" type="hidden" value={platform.status === "connected" ? "disconnect" : "connect"} />
+                <button className="mt-5 rounded-full border px-4 py-2 text-sm font-medium" type="submit">
+                  {platform.status === "connected" ? "Disconnect" : "Connect RSS feed"}
+                </button>
+              </form>
+            ) : (
+              <button className="mt-5 rounded-full border px-4 py-2 text-sm font-medium opacity-50" disabled type="button">
+                Planned
+              </button>
+            )}
           </article>
         ))}
       </div>

@@ -363,6 +363,9 @@ export const jobPostings = pgTable(
     remote: boolean("remote").default(false).notNull(),
     publishedAt: timestamp("published_at", { withTimezone: true, mode: "date" }),
     publicationDateVerified: boolean("publication_date_verified").default(false).notNull(),
+    firstSeenRunId: uuid("first_seen_run_id").references(() => searchRuns.id, {
+      onDelete: "set null",
+    }),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true, mode: "date" })
       .defaultNow()
       .notNull(),
@@ -377,6 +380,60 @@ export const jobPostings = pgTable(
   (table) => [
     uniqueIndex("job_postings_platform_external_unique").on(table.platform, table.externalId),
     index("job_postings_published_idx").on(table.publishedAt),
+  ],
+);
+
+export const jobSourceSnapshots = pgTable(
+  "job_source_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => searchRuns.id, { onDelete: "cascade" }),
+    platform: platformEnum("platform").notNull(),
+    externalId: text("external_id").notNull(),
+    jobPostingId: uuid("job_posting_id").references(() => jobPostings.id, {
+      onDelete: "set null",
+    }),
+    sourceUrl: text("source_url").notNull(),
+    contentHash: varchar("content_hash", { length: 64 }).notNull(),
+    sourcePayload: jsonb("source_payload").$type<Record<string, unknown>>().notNull(),
+    normalizedPayload: jsonb("normalized_payload").$type<Record<string, unknown>>(),
+    isNew: boolean("is_new"),
+    eligible: boolean("eligible"),
+    proposed: boolean("proposed"),
+    matchScore: integer("match_score"),
+    reasons: jsonb("reasons").$type<string[]>().default([]).notNull(),
+    concerns: jsonb("concerns").$type<string[]>().default([]).notNull(),
+    hardFilterFailures: jsonb("hard_filter_failures").$type<string[]>().default([]).notNull(),
+    failureCode: varchar("failure_code", { length: 128 }),
+    capturedAt: timestamp("captured_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("job_source_snapshots_run_platform_external_unique").on(
+      table.runId,
+      table.platform,
+      table.externalId,
+    ),
+    index("job_source_snapshots_tenant_owner_run_idx").on(
+      table.tenantId,
+      table.ownerId,
+      table.runId,
+    ),
+    index("job_source_snapshots_job_idx").on(table.jobPostingId),
+    check(
+      "job_source_snapshots_score_range",
+      sql`${table.matchScore} IS NULL OR ${table.matchScore} BETWEEN 0 AND 100`,
+    ),
   ],
 );
 

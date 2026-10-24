@@ -6,7 +6,7 @@ This repository is the new production-oriented implementation. The earlier Sites
 
 ## Current state
 
-The secure foundation and Phase 1 control plane are implemented locally:
+The secure foundation, Phase 1 control plane, and first Phase 2 discovery path are implemented locally:
 
 - Next.js 16 dashboard and onboarding shell;
 - Clerk sign-in/sign-up, protected routes, and per-user/per-organization tenant mapping;
@@ -14,12 +14,15 @@ The secure foundation and Phase 1 control plane are implemented locally:
 - private Cloudflare R2 CV upload, fail-closed malware scanning, bounded PDF/DOCX parsing, and user-confirmed activation;
 - persisted candidate preferences plus daily and weekly schedule CRUD with IANA timezone previews and DST-safe search windows;
 - capability-aware integration catalog, manual run queueing, and run history;
-- Vercel Cron dispatcher and durable Workflow run skeleton;
+- Vercel Cron dispatcher and durable Workflow search pipeline;
+- opt-in Djinni discovery through its first-party public RSS feed;
+- canonical vacancy normalization, run-scoped source snapshots, global deduplication, tenant proposal suppression, and deterministic explainable scoring;
+- per-run found, new, duplicate, eligible, proposed, and failed counters;
 - application/approval state machine with idempotency and audit-oriented records;
 - tenant-bound Eve assistant sessions;
 - focused unit tests and production builds.
 
-No live job-board connector is enabled yet. Saved schedules are therefore paused by design. See [the implementation plan](docs/IMPLEMENTATION_PLAN.md) for the phased delivery sequence and [the deployment guide](docs/DEPLOYMENT.md) for the environment gate.
+Djinni is the only implemented discovery connector. It is discover-only: JobPilot does not automate Djinni's authenticated UI or applications. Other job boards remain planned and saved schedules activate only when they include an explicitly connected, implemented discovery source. See [the implementation plan](docs/IMPLEMENTATION_PLAN.md) for the phased delivery sequence and [the deployment guide](docs/DEPLOYMENT.md) for the environment gate.
 
 ## Stack
 
@@ -54,6 +57,7 @@ docs/                  plan, deployment runbook, and ADRs
 drizzle/               reviewed SQL migrations
 lib/auth/              authoritative identity and tenant context
 lib/db/                schema, leasing, tenancy, and run persistence
+lib/discovery/         compliant source adapters
 lib/domain/            deterministic schedule/window/state rules
 lib/storage/           private R2 signing and object verification
 workflows/             durable search-run orchestration

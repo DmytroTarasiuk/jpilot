@@ -30,6 +30,15 @@ const runLabels: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+const runCounterLabels = [
+  ["found", "found"],
+  ["new", "new"],
+  ["duplicate", "duplicate"],
+  ["eligible", "eligible"],
+  ["proposed", "proposed"],
+  ["failed", "failed"],
+] as const;
+
 export default async function DashboardPage() {
   const identity = await getAuthenticatedTenantIdentity();
   if (!identity) redirect("/sign-in");
@@ -115,7 +124,15 @@ export default async function DashboardPage() {
           <div className="mt-5 divide-y divide-[#e6ebe7]">
             {runs.map((run) => (
               <div className="grid gap-2 py-4 first:pt-0 last:pb-0 sm:grid-cols-[1fr_auto] sm:items-center" key={run.id}>
-                <div><p className="font-medium">{run.scheduleName ?? "Deleted schedule"}</p><p className="mt-1 text-sm text-[#78857e]">{formatDate(run.windowStart, "UTC")} – {formatDate(run.windowEnd, "UTC")}</p></div>
+                <div>
+                  <p className="font-medium">{run.scheduleName ?? "Deleted schedule"}</p>
+                  <p className="mt-1 text-sm text-[#78857e]">{formatDate(run.windowStart, "UTC")} – {formatDate(run.windowEnd, "UTC")}</p>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#65746c]">
+                    {runCounterLabels.map(([key, label]) => (
+                      <span key={key}><strong className="text-[#34483d]">{run.counters[key] ?? 0}</strong> {label}</span>
+                    ))}
+                  </div>
+                </div>
                 <span className="w-fit rounded-full bg-[#edf2ec] px-3 py-1 text-xs font-semibold text-[#4b6054]">{runLabels[run.status] ?? run.status}</span>
               </div>
             ))}

@@ -146,13 +146,13 @@ Local acceptance gates cover tenant-scoped application paths, built-in CV valida
 
 ### Phase 2 — discovery and matching
 
-- Implement one compliant discovery adapter end-to-end before adding more.
-- Normalize source records, canonicalize URLs, and persist source snapshots.
-- Deduplicate globally and suppress earlier tenant proposals.
-- Combine hard rules with explainable match scoring.
-- Produce run counts: found, new, duplicate, eligible, proposed, and failed.
+- [x] Implement one compliant discovery adapter end-to-end before adding more (Djinni public RSS, discover-only).
+- [x] Normalize source records, canonicalize URLs, and persist source snapshots.
+- [x] Deduplicate globally and suppress earlier tenant proposals.
+- [x] Combine hard rules with explainable match scoring.
+- [x] Produce run counts: found, new, duplicate, eligible, proposed, and failed.
 
-Acceptance criteria: replaying a run or retrying a step creates no duplicate proposal or side effect.
+Acceptance criteria: replaying a run or retrying a step creates no duplicate proposal or side effect. Covered locally by PostgreSQL-backed integration tests; live RSS and deployed Workflow verification remain deployment gates.
 
 ### Phase 3 — approvals and applications
 
