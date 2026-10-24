@@ -22,6 +22,7 @@ export interface PreparedRun {
 }
 
 export async function claimDueSchedules(input: { now: Date; limit: number }) {
+  const leaseExpiresAt = new Date(input.now.getTime() + 30 * 60 * 1_000);
   const result = await getDb().execute(sql<ClaimedSchedule>`
     WITH due AS (
       SELECT schedule.id
@@ -41,7 +42,7 @@ export async function claimDueSchedules(input: { now: Date; limit: number }) {
     )
     UPDATE search_schedules AS schedule
     SET lease_token = gen_random_uuid(),
-        lease_expires_at = ${input.now} + INTERVAL '30 minutes',
+        lease_expires_at = ${leaseExpiresAt},
         updated_at = ${input.now}
     FROM due
     WHERE schedule.id = due.id
