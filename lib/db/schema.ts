@@ -14,6 +14,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { CvExtractedProfile } from "../domain/profile";
 
 const createdAt = timestamp("created_at", { withTimezone: true, mode: "date" })
   .defaultNow()
@@ -42,6 +43,21 @@ export const cvStatusEnum = pgEnum("cv_status", [
   "ready",
   "quarantined",
   "deleted",
+]);
+export const cvProcessingStatusEnum = pgEnum("cv_processing_status", [
+  "pending",
+  "scanning",
+  "parsing",
+  "awaiting_confirmation",
+  "confirmed",
+  "failed",
+]);
+export const cvScanStatusEnum = pgEnum("cv_scan_status", [
+  "pending",
+  "clean",
+  "infected",
+  "error",
+  "unavailable",
 ]);
 export const scheduleCadenceEnum = pgEnum("schedule_cadence", ["daily", "weekly"]);
 export const runTriggerEnum = pgEnum("run_trigger", ["manual", "scheduled", "catch_up"]);
@@ -152,6 +168,10 @@ export const candidateProfiles = pgTable(
     workModes: text("work_modes").array().default(sql`ARRAY[]::text[]`).notNull(),
     languages: text("languages").array().default(sql`ARRAY[]::text[]`).notNull(),
     excludedCompanies: text("excluded_companies").array().default(sql`ARRAY[]::text[]`).notNull(),
+    salaryMin: integer("salary_min"),
+    salaryCurrency: varchar("salary_currency", { length: 3 }).default("PLN").notNull(),
+    salaryPeriod: varchar("salary_period", { length: 16 }).default("monthly").notNull(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "date" }),
     profileFacts: jsonb("profile_facts").$type<Record<string, unknown>>().default({}).notNull(),
     createdAt,
     updatedAt,
@@ -179,11 +199,21 @@ export const cvDocuments = pgTable(
     sizeBytes: integer("size_bytes").notNull(),
     sha256: varchar("sha256", { length: 64 }),
     isActive: boolean("is_active").default(false).notNull(),
+    processingStatus: cvProcessingStatusEnum("processing_status").default("pending").notNull(),
+    scanStatus: cvScanStatusEnum("scan_status").default("pending").notNull(),
+    workflowRunId: text("workflow_run_id"),
+    parsedText: text("parsed_text"),
+    extractedProfile: jsonb("extracted_profile").$type<CvExtractedProfile>(),
+    processingErrorCode: varchar("processing_error_code", { length: 128 }),
+    scannedAt: timestamp("scanned_at", { withTimezone: true, mode: "date" }),
+    parsedAt: timestamp("parsed_at", { withTimezone: true, mode: "date" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "date" }),
     createdAt,
     updatedAt,
   },
   (table) => [
     uniqueIndex("cv_documents_object_key_unique").on(table.objectKey),
+    uniqueIndex("cv_documents_workflow_run_unique").on(table.workflowRunId),
     index("cv_documents_tenant_owner_idx").on(table.tenantId, table.ownerId),
     check("cv_documents_size_positive", sql`${table.sizeBytes} > 0`),
   ],
@@ -238,6 +268,7 @@ export const searchSchedules = pgTable(
     localTime: varchar("local_time", { length: 5 }).notNull(),
     dayOfWeek: integer("day_of_week"),
     targetCountries: text("target_countries").array().notNull(),
+    desiredEnabled: boolean("desired_enabled").default(true).notNull(),
     enabled: boolean("enabled").default(false).notNull(),
     maxAgeDays: integer("max_age_days").default(7).notNull(),
     nextRunAt: timestamp("next_run_at", { withTimezone: true, mode: "date" }).notNull(),

@@ -6,13 +6,14 @@ This repository is the new production-oriented implementation. The earlier Sites
 
 ## Current state
 
-The secure foundation is implemented locally:
+The secure foundation and Phase 1 control plane are implemented locally:
 
 - Next.js 16 dashboard and onboarding shell;
 - Clerk sign-in/sign-up, protected routes, and per-user/per-organization tenant mapping;
 - Neon Postgres schema and Drizzle migrations;
-- private Cloudflare R2 CV upload/finalization using short-lived presigned URLs;
-- daily and weekly schedule creation with IANA timezone and DST-safe search windows;
+- private Cloudflare R2 CV upload, fail-closed malware scanning, bounded PDF/DOCX parsing, and user-confirmed activation;
+- persisted candidate preferences plus daily and weekly schedule CRUD with IANA timezone previews and DST-safe search windows;
+- capability-aware integration catalog, manual run queueing, and run history;
 - Vercel Cron dispatcher and durable Workflow run skeleton;
 - application/approval state machine with idempotency and audit-oriented records;
 - tenant-bound Eve assistant sessions;

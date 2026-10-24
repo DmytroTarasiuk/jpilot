@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { implementedDiscoveryPlatforms } from "../domain/platform-catalog";
 import { nextScheduleOccurrence } from "../domain/schedule";
 import { getDb } from "./client";
 import {
@@ -62,7 +63,10 @@ export async function inspectSearchRunCapabilities(runId: string) {
     selectedPlatforms: selected.map((item) => item.platform),
     runnablePlatforms: selected
       .map((item) => item.platform)
-      .filter((platform) => connectedDiscovery.has(platform)),
+      .filter(
+        (platform) =>
+          connectedDiscovery.has(platform) && implementedDiscoveryPlatforms.has(platform),
+      ),
   };
 }
 

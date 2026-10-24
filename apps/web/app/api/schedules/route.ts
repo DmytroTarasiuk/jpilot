@@ -1,5 +1,5 @@
 import { getAuthenticatedTenantIdentity } from "@jobpilot/auth/request-context";
-import { createSearchSchedule } from "@jobpilot/db/schedules";
+import { createSearchSchedule, listSearchSchedules } from "@jobpilot/db/schedules";
 import { scheduleInputSchema } from "@jobpilot/domain/schedule";
 
 export async function POST(request: Request) {
@@ -24,5 +24,14 @@ export async function POST(request: Request) {
     name: schedule.name,
     enabled: schedule.enabled,
     nextRunAt: schedule.nextRunAt.toISOString(),
+    desiredEnabled: schedule.desiredEnabled,
+    pausedReason: schedule.desiredEnabled && !schedule.enabled ? "no_connected_discovery_integration" : null,
   });
+}
+
+export async function GET() {
+  const identity = await getAuthenticatedTenantIdentity();
+  if (!identity) return Response.json({ error: "Authentication is required." }, { status: 401 });
+  const schedules = await listSearchSchedules(identity);
+  return Response.json({ schedules });
 }

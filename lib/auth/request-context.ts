@@ -5,11 +5,12 @@ export async function getAuthenticatedTenantIdentity() {
   const clerk = await auth();
   if (!clerk.userId) return null;
 
-  return ensureTenantIdentity({
+  const identity = await ensureTenantIdentity({
     clerkUserId: clerk.userId,
     clerkOrganizationId: clerk.orgId ?? null,
     clerkOrganizationRole: clerk.orgRole ?? null,
   });
+  return { ...identity, ownerId: identity.userId };
 }
 
 export async function requireAuthenticatedTenantIdentity() {

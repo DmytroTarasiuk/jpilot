@@ -8,6 +8,7 @@ import {
   LayoutDashboardIcon,
   Link2Icon,
   RadarIcon,
+  UserRoundIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -15,6 +16,7 @@ import type { ReactNode } from "react";
 
 const navigation = [
   ["Dashboard", "/dashboard", LayoutDashboardIcon],
+  ["Profile", "/profile", UserRoundIcon],
   ["Applications", "/applications", BriefcaseBusinessIcon],
   ["Search schedule", "/schedule", CalendarClockIcon],
   ["CV", "/cv", FileTextIcon],

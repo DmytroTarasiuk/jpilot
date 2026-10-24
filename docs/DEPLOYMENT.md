@@ -26,6 +26,8 @@ Create every key listed in `.env.example` in the appropriate Vercel environment.
 
 Use separate credentials for development, preview, and production. Do not expose `CLERK_SECRET_KEY`, `DATABASE_URL`, or R2 credentials through any `NEXT_PUBLIC_` variable.
 
+Configure `MALWARE_SCAN_URL` and `MALWARE_SCAN_TOKEN` for a private scanner endpoint. The application sends the raw file body plus its SHA-256 digest, declared type, and encoded filename; the endpoint must authenticate the bearer token and return JSON shaped as `{ "verdict": "clean" | "infected", "provider": "...", "signature": "..." }`. CV parsing fails closed when the scanner is absent, unreachable, or returns an invalid response.
+
 ## 3. Configure the private R2 bucket
 
 Keep public bucket access disabled. Create an API token limited to the one CV bucket and only the operations required by the application.
@@ -47,7 +49,7 @@ Apply a CORS policy per environment. Replace the sample origins with exact URLs;
 ]
 ```
 
-The current upload contract signs one object key, content type, and content length for ten minutes. Finalization performs an authenticated tenant lookup and validates the stored length and content type before making the document active.
+The current upload contract signs one object key, content type, and content length for ten minutes. Finalization performs an authenticated tenant lookup and validates the stored length and content type before starting the durable scan/parse workflow. The CV becomes active only after the user reviews and confirms the extracted profile.
 
 ## 4. Prepare Neon safely
 
@@ -64,7 +66,7 @@ Verify these flows with two unrelated Clerk users and, if organizations are enab
 - public landing and sign-in/sign-up;
 - protected-page redirect while signed out;
 - no cross-tenant read, mutation, CV finalization, or Eve session access;
-- PDF and DOCX upload, wrong content type, wrong size, expired URL, and oversized upload;
+- PDF and DOCX upload, signature/type mismatch, wrong size, expired URL, oversized upload, scanner failure, infected files, archive expansion limits, and user confirmation;
 - daily and weekly schedules around DST boundaries;
 - duplicate schedule request IDs and duplicate dispatcher invocations;
 - invalid and missing `CRON_SECRET`;

@@ -38,6 +38,7 @@ describe("scheduleInputSchema", () => {
       dayOfWeek: null,
       targetCountries: ["PL"],
       platforms: [{ platform: "linkedin", searchLimit: 10, autoApplyLimit: 11 }],
+      desiredEnabled: true,
     });
     expect(result.success).toBe(false);
   });

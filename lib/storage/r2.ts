@@ -51,3 +51,12 @@ export async function inspectPrivateObject(objectKey: string) {
   const { R2_BUCKET_NAME } = getR2Environment();
   return getR2Client().send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: objectKey }));
 }
+
+export async function downloadPrivateObject(objectKey: string) {
+  const { R2_BUCKET_NAME } = getR2Environment();
+  const response = await getR2Client().send(
+    new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: objectKey }),
+  );
+  if (!response.Body) throw new Error("The private object has no body.");
+  return Buffer.from(await response.Body.transformToByteArray());
+}

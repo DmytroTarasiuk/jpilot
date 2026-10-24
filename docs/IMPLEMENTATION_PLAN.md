@@ -136,13 +136,13 @@ Phase 0 provides working infrastructure and UI contracts, not live job-board dis
 
 ### Phase 1 — onboarding and control plane
 
-- Persist candidate profile, countries, titles, work modes, languages, exclusions, and salary preferences.
-- CV parsing pipeline with malware/content checks and user-confirmed extracted profile.
-- Integration catalog with capability and connection state.
-- Schedule CRUD with timezone preview and per-platform search/apply limits.
-- Run-now action and run-history dashboard.
+- [x] Persist candidate profile, countries, titles, work modes, languages, exclusions, and salary preferences.
+- [x] Add a durable CV parsing pipeline with fail-closed malware/content checks and a user-confirmed extracted profile.
+- [x] Add an integration catalog with capability and connection state.
+- [x] Add schedule CRUD with timezone preview and per-platform search/apply limits.
+- [x] Add a run-now action and run-history dashboard.
 
-Acceptance criteria: one authenticated user can upload a CV, configure a daily or weekly schedule, preview the exact next search window, and enqueue a manual run without cross-tenant access.
+Local acceptance gates pass: tenant-scoped application paths are implemented; typecheck, 16 focused unit tests, the Eve build, and the Next.js production build pass. Live acceptance still requires linked Clerk, a migrated Neon development branch, private R2, and a configured private malware scanner. No discovery connector is implemented in Phase 1, so queued runs terminate in a visible waiting state rather than fabricating results.
 
 ### Phase 2 — discovery and matching
 

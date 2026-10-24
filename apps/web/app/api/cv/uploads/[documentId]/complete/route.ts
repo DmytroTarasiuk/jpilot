@@ -1,6 +1,12 @@
 import { getAuthenticatedTenantIdentity } from "@jobpilot/auth/request-context";
-import { findOwnedCvDocument, markCvDocumentReady } from "@jobpilot/db/cv-documents";
+import {
+  findOwnedCvDocument,
+  markCvDocumentReady,
+  recordCvWorkflowDispatch,
+} from "@jobpilot/db/cv-documents";
 import { inspectPrivateObject } from "@jobpilot/storage/r2";
+import { cvProcessingWorkflow } from "@jobpilot-workflows/cv-processing";
+import { start } from "workflow/api";
 
 export async function POST(
   _request: Request,
@@ -30,5 +36,16 @@ export async function POST(
     ownerId: identity.userId,
   });
   if (!completed) return Response.json({ error: "The upload could not be finalized." }, { status: 409 });
-  return Response.json({ documentId: completed.id, status: completed.status });
+  const workflow = await start(cvProcessingWorkflow, [completed.id], {
+    attributes: {
+      jobpilotDocumentId: completed.id,
+      jobpilotTenantId: identity.tenantId,
+    },
+  });
+  await recordCvWorkflowDispatch({ id: completed.id, workflowRunId: workflow.runId });
+  return Response.json({
+    documentId: completed.id,
+    status: completed.status,
+    processingStatus: completed.processingStatus,
+  });
 }

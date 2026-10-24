@@ -1,6 +1,7 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import type { CandidateProfileInput, CvExtractedProfile } from "../domain/profile";
 import { getDb } from "./client";
-import { cvDocuments } from "./schema";
+import { candidateProfiles, cvDocuments } from "./schema";
 
 export async function createPendingCvDocument(input: {
   id: string;
@@ -41,15 +42,9 @@ export async function markCvDocumentReady(input: {
   tenantId: string;
   ownerId: string;
 }) {
-  const db = getDb();
-  await db
+  const [record] = await getDb()
     .update(cvDocuments)
-    .set({ isActive: false, updatedAt: new Date() })
-    .where(and(eq(cvDocuments.tenantId, input.tenantId), eq(cvDocuments.ownerId, input.ownerId)));
-
-  const [record] = await db
-    .update(cvDocuments)
-    .set({ status: "ready", isActive: true, updatedAt: new Date() })
+    .set({ status: "ready", isActive: false, processingStatus: "pending", updatedAt: new Date() })
     .where(
       and(
         eq(cvDocuments.id, input.id),
@@ -60,4 +55,163 @@ export async function markCvDocumentReady(input: {
     )
     .returning();
   return record ?? null;
+}
+
+export async function recordCvWorkflowDispatch(input: { id: string; workflowRunId: string }) {
+  await getDb()
+    .update(cvDocuments)
+    .set({ workflowRunId: input.workflowRunId, updatedAt: new Date() })
+    .where(and(eq(cvDocuments.id, input.id), eq(cvDocuments.status, "ready")));
+}
+
+export async function listOwnedCvDocuments(input: {
+  tenantId: string;
+  ownerId: string;
+  limit?: number;
+}) {
+  return getDb()
+    .select({
+      id: cvDocuments.id,
+      originalName: cvDocuments.originalName,
+      sizeBytes: cvDocuments.sizeBytes,
+      status: cvDocuments.status,
+      processingStatus: cvDocuments.processingStatus,
+      scanStatus: cvDocuments.scanStatus,
+      extractedProfile: cvDocuments.extractedProfile,
+      processingErrorCode: cvDocuments.processingErrorCode,
+      isActive: cvDocuments.isActive,
+      createdAt: cvDocuments.createdAt,
+      parsedAt: cvDocuments.parsedAt,
+      confirmedAt: cvDocuments.confirmedAt,
+    })
+    .from(cvDocuments)
+    .where(
+      and(
+        eq(cvDocuments.tenantId, input.tenantId),
+        eq(cvDocuments.ownerId, input.ownerId),
+        ne(cvDocuments.status, "deleted"),
+      ),
+    )
+    .orderBy(desc(cvDocuments.createdAt))
+    .limit(input.limit ?? 10);
+}
+
+export async function beginCvProcessing(id: string) {
+  const [document] = await getDb()
+    .update(cvDocuments)
+    .set({
+      processingStatus: "scanning",
+      scanStatus: "pending",
+      processingErrorCode: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(cvDocuments.id, id),
+        eq(cvDocuments.status, "ready"),
+        inArray(cvDocuments.processingStatus, ["pending", "failed"]),
+      ),
+    )
+    .returning();
+  return document ?? null;
+}
+
+export async function markCvParsing(id: string, sha256: string) {
+  await getDb()
+    .update(cvDocuments)
+    .set({
+      sha256,
+      scanStatus: "clean",
+      scannedAt: new Date(),
+      processingStatus: "parsing",
+      updatedAt: new Date(),
+    })
+    .where(eq(cvDocuments.id, id));
+}
+
+export async function completeCvProcessing(input: {
+  id: string;
+  sha256: string;
+  parsedText: string;
+  extractedProfile: CvExtractedProfile;
+}) {
+  await getDb()
+    .update(cvDocuments)
+    .set({
+      sha256: input.sha256,
+      scanStatus: "clean",
+      processingStatus: "awaiting_confirmation",
+      parsedText: input.parsedText,
+      extractedProfile: input.extractedProfile,
+      scannedAt: new Date(),
+      parsedAt: new Date(),
+      processingErrorCode: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(cvDocuments.id, input.id));
+}
+
+export async function failCvProcessing(input: { id: string; errorCode: string }) {
+  const infected = input.errorCode === "malware_detected";
+  const unavailable = input.errorCode === "malware_scanner_unavailable";
+  await getDb()
+    .update(cvDocuments)
+    .set({
+      status: infected ? "quarantined" : "ready",
+      processingStatus: "failed",
+      scanStatus: infected ? "infected" : unavailable ? "unavailable" : "error",
+      processingErrorCode: input.errorCode,
+      scannedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(cvDocuments.id, input.id));
+}
+
+export async function confirmCvProfile(input: {
+  id: string;
+  tenantId: string;
+  ownerId: string;
+  profile: CandidateProfileInput;
+}) {
+  const db = getDb();
+  const [document] = await db
+    .select({ id: cvDocuments.id })
+    .from(cvDocuments)
+    .where(
+      and(
+        eq(cvDocuments.id, input.id),
+        eq(cvDocuments.tenantId, input.tenantId),
+        eq(cvDocuments.ownerId, input.ownerId),
+        eq(cvDocuments.processingStatus, "awaiting_confirmation"),
+      ),
+    )
+    .limit(1);
+  if (!document) return null;
+
+  const now = new Date();
+  await db.batch([
+    db
+      .insert(candidateProfiles)
+      .values({ tenantId: input.tenantId, ownerId: input.ownerId, ...input.profile, confirmedAt: now })
+      .onConflictDoUpdate({
+        target: [candidateProfiles.tenantId, candidateProfiles.ownerId],
+        set: { ...input.profile, confirmedAt: now, updatedAt: now },
+      }),
+    db
+      .update(cvDocuments)
+      .set({ isActive: false, updatedAt: now })
+      .where(and(eq(cvDocuments.tenantId, input.tenantId), eq(cvDocuments.ownerId, input.ownerId))),
+    db
+      .update(cvDocuments)
+      .set({ isActive: true, processingStatus: "confirmed", confirmedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(cvDocuments.id, input.id),
+          eq(cvDocuments.tenantId, input.tenantId),
+          eq(cvDocuments.ownerId, input.ownerId),
+          eq(cvDocuments.processingStatus, "awaiting_confirmation"),
+        ),
+      ),
+  ]);
+  return { id: input.id, confirmedAt: now };
 }

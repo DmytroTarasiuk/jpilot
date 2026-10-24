@@ -12,6 +12,22 @@ export const cvUploadRequestSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
   contentType: z.enum(allowedCvTypes),
   sizeBytes: z.number().int().positive().max(MAX_CV_BYTES),
+}).superRefine((value, context) => {
+  const lowerName = value.fileName.toLowerCase();
+  const expectedExtension = value.contentType === "application/pdf" ? ".pdf" : ".docx";
+  if (
+    !lowerName.endsWith(expectedExtension) ||
+    value.fileName.includes("\0") ||
+    value.fileName.includes(":") ||
+    value.fileName.includes("/") ||
+    value.fileName.includes("\\")
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["fileName"],
+      message: "The filename and declared document type do not match.",
+    });
+  }
 });
 
 export async function prepareCvUpload(input: {

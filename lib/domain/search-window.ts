@@ -1,4 +1,5 @@
 import { Temporal } from "@js-temporal/polyfill";
+import { z } from "zod";
 
 export type ScheduledCadence = "daily" | "weekly";
 
@@ -8,6 +9,12 @@ export interface SearchWindow {
   timezone: string;
   source: "scheduled" | "manual";
 }
+
+export const manualRunInputSchema = z.object({
+  requestId: z.string().uuid(),
+  scheduleId: z.string().uuid(),
+  lookbackDays: z.number().int().min(1).max(7),
+});
 
 export function scheduledSearchWindow(input: {
   scheduledAt: Date | string;

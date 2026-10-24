@@ -1,11 +1,13 @@
 "use client";
 
 import { CheckCircle2Icon, FileUpIcon, LoaderCircleIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 type UploadState = "idle" | "requesting" | "uploading" | "finalizing" | "done" | "error";
 
 export function CvUploader() {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<UploadState>("idle");
   const [message, setMessage] = useState("PDF or DOCX · maximum 10 MB");
@@ -37,7 +39,8 @@ export function CvUploader() {
       if (!finalized.ok) throw new Error(await responseMessage(finalized));
 
       setState("done");
-      setMessage(`${file.name} is now your active CV.`);
+      setMessage(`${file.name} was uploaded. Secure processing has started.`);
+      router.refresh();
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "Upload failed. Please try again.");
@@ -74,7 +77,7 @@ export function CvUploader() {
           )}
         </span>
         <span className="mt-5 font-semibold">{state === "done" ? "Upload another CV" : "Choose a CV to upload"}</span>
-        <span className={`mt-2 text-sm ${state === "error" ? "text-red-700" : "text-[#718078]"}`}>{message}</span>
+        <span aria-live="polite" className={`mt-2 text-sm ${state === "error" ? "text-red-700" : "text-[#718078]"}`}>{message}</span>
       </button>
       <p className="mt-4 text-xs leading-5 text-[#7a8780]">
         The browser uploads directly through a ten-minute signed URL. The bucket is not public, and JobPilot stores only the private object key.

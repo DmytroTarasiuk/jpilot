@@ -17,6 +17,11 @@ const r2Schema = z.object({
   R2_ENDPOINT: z.string().url().optional().or(z.literal("")),
 });
 
+const malwareScannerSchema = z.object({
+  MALWARE_SCAN_URL: z.string().url(),
+  MALWARE_SCAN_TOKEN: z.string().min(16),
+});
+
 function parseEnvironment<T extends z.ZodType>(schema: T, label: string): z.output<T> {
   const result = schema.safeParse(process.env);
   if (!result.success) {
@@ -42,4 +47,9 @@ export function getR2Environment() {
       environment.R2_ENDPOINT ||
       `https://${environment.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   };
+}
+
+export function getMalwareScannerEnvironment() {
+  const result = malwareScannerSchema.safeParse(process.env);
+  return result.success ? result.data : null;
 }
