@@ -33,8 +33,9 @@ jobs:
           JOBPILOT_CRON_URL: ${{ vars.JOBPILOT_CRON_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body --silent --show-error \
-            --retry 3 --retry-all-errors \
+          curl --fail-with-body \
+            --silent \
+            --show-error \
             --request POST \
-            --header "Authorization: Bearer ${CRON_SECRET}" \
-            "$JOBPILOT_CRON_URL"
+            --header "Authorization: Bearer $CRON_SECRET" \
+            "$CRON_URL"
