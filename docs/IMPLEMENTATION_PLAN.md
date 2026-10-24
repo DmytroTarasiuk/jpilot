@@ -55,7 +55,7 @@ flowchart LR
 - **Eve:** durable agent sessions, typed tools, human-in-the-loop approval prompts, and tenant-projected runtime context.
 - **Neon + Drizzle:** tenant data, schedules, leased run queue, normalized vacancies, proposals, applications, approval requests, audit trail, and Eve session ownership.
 - **Cloudflare R2:** private CV originals and future generated application artifacts. Neon stores metadata and object keys only.
-- **Vercel Cron:** invokes one small dispatcher frequently. User schedules remain rows in Neon.
+- **Dispatcher timer:** invokes one small authenticated dispatcher frequently. User schedules remain rows in Neon. Prelaunch Hobby deployments use GitHub Actions every five minutes plus a daily Vercel Cron recovery invocation; Pro/Enterprise can move the same endpoint to once-per-minute Vercel Cron.
 - **Vercel Workflow:** one durable, retryable pipeline per claimed search run.
 
 Application-owned scheduling is deliberate. Eve's creator-owned dynamic schedules currently require an organization-level feature flag and do not serve preview deployments by default. A Neon-backed dispatcher gives us portable tenancy, catch-up, leasing, and deterministic job windows.
@@ -137,12 +137,12 @@ Phase 0 provides working infrastructure and UI contracts, not live job-board dis
 ### Phase 1 — onboarding and control plane
 
 - [x] Persist candidate profile, countries, titles, work modes, languages, exclusions, and salary preferences.
-- [x] Add a durable CV parsing pipeline with fail-closed malware/content checks and a user-confirmed extracted profile.
+- [x] Add a durable CV parsing pipeline with bounded built-in content checks, optional fail-closed Cloudmersive scanning, and a user-confirmed extracted profile.
 - [x] Add an integration catalog with capability and connection state.
 - [x] Add schedule CRUD with timezone preview and per-platform search/apply limits.
 - [x] Add a run-now action and run-history dashboard.
 
-Local acceptance gates pass: tenant-scoped application paths are implemented; typecheck, 16 focused unit tests, the Eve build, and the Next.js production build pass. Live acceptance still requires linked Clerk, a migrated Neon development branch, private R2, and a configured private malware scanner. No discovery connector is implemented in Phase 1, so queued runs terminate in a visible waiting state rather than fabricating results.
+Local acceptance gates cover tenant-scoped application paths, built-in CV validation, opt-in Cloudmersive fail-closed scanning, authenticated dispatch, timezone logic, the Eve build, and the Next.js production build. Live acceptance still requires linked Clerk, a migrated Neon development branch, private R2, and GitHub dispatcher settings while the project remains on Vercel Hobby. `CLOUDMERSIVE_API_KEY` is required only when `CV_MALWARE_SCAN_ENABLED=true`; production launch should not rely on built-in checks alone. No discovery connector is implemented in Phase 1, so queued runs terminate in a visible waiting state rather than fabricating results.
 
 ### Phase 2 — discovery and matching
 

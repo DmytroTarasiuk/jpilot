@@ -102,7 +102,7 @@ function StatusBadge({ label, tone }: { label: string; tone: "good" | "bad" | "n
 }
 
 function humanizeProcessingError(code: string) {
-  if (code === "malware_scanner_unavailable") return "Secure scanner is not configured; parsing is blocked.";
+  if (code === "malware_scanner_unavailable") return "Cloudmersive scanning is enabled but its API key is not configured.";
   if (code === "malware_detected") return "The scanner quarantined this document.";
   return `Processing stopped: ${code.replaceAll("_", " ")}.`;
 }

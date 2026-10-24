@@ -5,3 +5,8 @@ allowBuilds:
   cbor-extract: true
   esbuild: true
   sharp: false
+overrides:
+  'katex@<0.18.2': 0.18.2
+  'undici@>=7.0.0 <7.30.1': 7.30.1
+  'undici@>=8.0.0 <8.12.2': 8.12.2
+  'zod@<4.6.6': 4.6.6

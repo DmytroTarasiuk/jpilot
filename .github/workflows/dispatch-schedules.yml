@@ -1,0 +1,40 @@
+name: Dispatch due JobPilot searches
+
+on:
+  schedule:
+    # Vercel Hobby permits only daily cron jobs. This provides five-minute
+    # dispatch precision until the project moves to Vercel Pro.
+    - cron: "3-58/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jobpilot-schedule-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate dispatcher configuration
+        env:
+          JOBPILOT_CRON_URL: ${{ vars.JOBPILOT_CRON_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$JOBPILOT_CRON_URL" || { echo "Missing Actions variable JOBPILOT_CRON_URL"; exit 1; }
+          test -n "$CRON_SECRET" || { echo "Missing Actions secret CRON_SECRET"; exit 1; }
+
+      - name: Claim and dispatch due schedules
+        env:
+          JOBPILOT_CRON_URL: ${{ vars.JOBPILOT_CRON_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors \
+            --request POST \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "$JOBPILOT_CRON_URL"

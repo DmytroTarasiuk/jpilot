@@ -17,9 +17,12 @@ const r2Schema = z.object({
   R2_ENDPOINT: z.string().url().optional().or(z.literal("")),
 });
 
-const malwareScannerSchema = z.object({
-  MALWARE_SCAN_URL: z.string().url(),
-  MALWARE_SCAN_TOKEN: z.string().min(16),
+const cloudmersiveSchema = z.object({
+  CLOUDMERSIVE_API_KEY: z.string().min(16),
+});
+
+const cvMalwareScanSchema = z.object({
+  CV_MALWARE_SCAN_ENABLED: z.enum(["true", "false"]).default("false"),
 });
 
 function parseEnvironment<T extends z.ZodType>(schema: T, label: string): z.output<T> {
@@ -49,7 +52,11 @@ export function getR2Environment() {
   };
 }
 
-export function getMalwareScannerEnvironment() {
-  const result = malwareScannerSchema.safeParse(process.env);
+export function getCloudmersiveEnvironment() {
+  const result = cloudmersiveSchema.safeParse(process.env);
   return result.success ? result.data : null;
+}
+
+export function isCloudmersiveMalwareScanEnabled() {
+  return parseEnvironment(cvMalwareScanSchema, "CV malware scan").CV_MALWARE_SCAN_ENABLED === "true";
 }

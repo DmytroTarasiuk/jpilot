@@ -55,6 +55,7 @@ export const cvProcessingStatusEnum = pgEnum("cv_processing_status", [
 export const cvScanStatusEnum = pgEnum("cv_scan_status", [
   "pending",
   "clean",
+  "skipped",
   "infected",
   "error",
   "unavailable",

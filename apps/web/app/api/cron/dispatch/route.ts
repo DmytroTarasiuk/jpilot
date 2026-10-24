@@ -1,8 +1,9 @@
+import { isAuthorizedCronRequest } from "@jobpilot/auth/cron";
 import { claimDueSchedules, prepareClaimedSearchRun, recordWorkflowDispatch } from "@jobpilot/db/dispatcher";
 import { searchRunWorkflow } from "@jobpilot-workflows/search-run";
 import { start } from "workflow/api";
 
-export async function GET(request: Request) {
+async function dispatchDueSchedules(request: Request) {
   if (!isAuthorizedCronRequest(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -25,7 +26,5 @@ export async function GET(request: Request) {
   return Response.json({ claimed: claimed.length, started });
 }
 
-function isAuthorizedCronRequest(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  return Boolean(secret) && request.headers.get("authorization") === `Bearer ${secret}`;
-}
+export const GET = dispatchDueSchedules;
+export const POST = dispatchDueSchedules;

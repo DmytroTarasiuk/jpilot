@@ -1,0 +1,1 @@
+ALTER TYPE "public"."cv_scan_status" ADD VALUE 'skipped' BEFORE 'infected';

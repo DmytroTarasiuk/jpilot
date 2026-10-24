@@ -43,6 +43,7 @@
     "@vercel/connect": "2.5.2",
     "ai": "^7.0.137",
     "class-variance-authority": "0.7.1",
+    "cloudmersive-virus-api-client": "1.4.0",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
     "drizzle-orm": "^0.45.4",
@@ -50,8 +51,8 @@
     "lucide-react": "1.16.0",
     "mammoth": "^1.13.0",
     "motion": "12.40.0",
-    "nanoid": "5.1.11",
-    "next": "16.3.6",
+    "nanoid": "5.1.16",
+    "next": "16.4.1",
     "radix-ui": "1.4.3",
     "react": "19.2.6",
     "react-dom": "19.2.6",
@@ -64,13 +65,15 @@
     "use-stick-to-bottom": "1.1.4",
     "workflow": "^5.2.3",
     "yauzl": "^3.4.0",
-    "zod": "4.5.4"
+    "zod": "4.6.6"
   },
   "devDependencies": {
+    "@types/cloudmersive-virus-api-client": "1.1.4",
     "@types/node": "~26.6.5",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
     "drizzle-kit": "^0.31.11",
+    "microsandbox": "0.5.5",
     "typescript": "6.0.3",
     "vitest": "^5.0.5"
   },

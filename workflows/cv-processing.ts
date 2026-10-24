@@ -19,10 +19,13 @@ async function processCvDocumentStep(documentId: string) {
   } = await import("../lib/db/cv-documents");
   const { downloadPrivateObject } = await import("../lib/storage/r2");
   const { CvProcessingError, inspectAndExtractCv } = await import("../lib/storage/cv-processing");
+  const { isCloudmersiveMalwareScanEnabled } = await import("../lib/env/server");
 
   const document = await beginCvProcessing(documentId);
   if (!document) return { status: "duplicate_or_ineligible" as const };
 
+  const malwareScanEnabled = isCloudmersiveMalwareScanEnabled();
+  let scanStatus: "pending" | "clean" | "skipped" = malwareScanEnabled ? "pending" : "skipped";
   try {
     const bytes = await downloadPrivateObject(document.objectKey);
     if (bytes.length !== document.sizeBytes) {
@@ -32,13 +35,17 @@ async function processCvDocumentStep(documentId: string) {
       bytes,
       contentType: document.contentType,
       originalName: document.originalName,
-      onScanClean: (sha256) => markCvParsing(document.id, sha256),
+      malwareScanEnabled,
+      onSafetyChecksPassed: (sha256, completedScanStatus) => {
+        scanStatus = completedScanStatus;
+        return markCvParsing(document.id, sha256, completedScanStatus);
+      },
     });
     await completeCvProcessing({ id: document.id, ...result });
     return { status: "awaiting_confirmation" as const };
   } catch (error) {
     const code = error instanceof CvProcessingError ? error.code : "cv_processing_failed";
-    await failCvProcessing({ id: document.id, errorCode: code });
+    await failCvProcessing({ id: document.id, errorCode: code, scanStatus });
     console.error("CV processing failed", { documentId, code });
     if (code === "malware_scanner_error") throw error;
     return { status: "failed" as const, code };

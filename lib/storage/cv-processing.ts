@@ -1,20 +1,80 @@
 import { createHash } from "node:crypto";
+import CloudmersiveVirusApiClient from "cloudmersive-virus-api-client";
 import mammoth from "mammoth";
 import { extractText, getDocumentProxy } from "unpdf";
 import { fromBufferPromise } from "yauzl";
 import { z } from "zod";
-import { getMalwareScannerEnvironment } from "../env/server";
 import { extractProfileSuggestions } from "../domain/profile";
+import { getCloudmersiveEnvironment, isCloudmersiveMalwareScanEnabled } from "../env/server";
 
 const MAX_PARSED_TEXT = 250_000;
 const MAX_PDF_PAGES = 10;
 const MAX_DOCX_ENTRIES = 250;
 const MAX_DOCX_UNCOMPRESSED_BYTES = 25 * 1024 * 1024;
-const scannerResponseSchema = z.object({
-  verdict: z.enum(["clean", "infected"]),
-  provider: z.string().trim().min(1).max(80),
-  signature: z.string().trim().max(160).optional(),
+const cloudmersiveResponseSchema = z.object({
+  CleanResult: z.boolean(),
+  FoundViruses: z
+    .array(
+      z.object({
+        FileName: z.string().optional(),
+        VirusName: z.string().trim().min(1),
+      }),
+    )
+    .nullish(),
+  ContainsExecutable: z.boolean().optional(),
+  ContainsInvalidFile: z.boolean().optional(),
+  ContainsScript: z.boolean().optional(),
+  ContainsPasswordProtectedFile: z.boolean().optional(),
+  ContainsRestrictedFileFormat: z.boolean().optional(),
+  ContainsMacros: z.boolean().optional(),
+  ContainsXmlExternalEntities: z.boolean().optional(),
+  ContainsInsecureDeserialization: z.boolean().optional(),
+  ContainsHtml: z.boolean().optional(),
+  ContainsUnsafeArchive: z.boolean().optional(),
+  ContainsOleEmbeddedObject: z.boolean().optional(),
+  ContainsUnwantedAction: z.boolean().optional(),
+  VerifiedFileFormat: z.string().nullish(),
 });
+
+const cloudmersiveThreatFlags = [
+  "ContainsExecutable",
+  "ContainsInvalidFile",
+  "ContainsScript",
+  "ContainsPasswordProtectedFile",
+  "ContainsRestrictedFileFormat",
+  "ContainsMacros",
+  "ContainsXmlExternalEntities",
+  "ContainsInsecureDeserialization",
+  "ContainsHtml",
+  "ContainsUnsafeArchive",
+  "ContainsOleEmbeddedObject",
+  "ContainsUnwantedAction",
+] as const;
+
+interface CloudmersiveAdvancedScanOptions {
+  fileName: string;
+  allowExecutables: boolean;
+  allowInvalidFiles: boolean;
+  allowScripts: boolean;
+  allowPasswordProtectedFiles: boolean;
+  allowMacros: boolean;
+  allowXmlExternalEntities: boolean;
+  allowInsecureDeserialization: boolean;
+  allowHtml: boolean;
+  allowUnsafeArchives: boolean;
+  allowOleEmbeddedObject: boolean;
+  allowUnwantedAction: boolean;
+  options: string;
+  restrictFileTypes: string;
+}
+
+interface CloudmersiveScanApi {
+  scanFileAdvanced: (
+    inputFile: Buffer,
+    options: CloudmersiveAdvancedScanOptions,
+    callback: (error: unknown, data: unknown) => void,
+  ) => unknown;
+}
 
 export class CvProcessingError extends Error {
   constructor(
@@ -30,15 +90,24 @@ export async function inspectAndExtractCv(input: {
   bytes: Buffer;
   contentType: string;
   originalName: string;
-  onScanClean?: (sha256: string) => Promise<void>;
+  malwareScanEnabled?: boolean;
+  onSafetyChecksPassed?: (sha256: string, scanStatus: "clean" | "skipped") => Promise<void>;
 }) {
   validateMagicBytes(input.bytes, input.contentType);
   const sha256 = createHash("sha256").update(input.bytes).digest("hex");
-  const scan = await scanForMalware({ ...input, sha256 });
-  if (scan.verdict !== "clean") {
+  const malwareScanEnabled = input.malwareScanEnabled ?? isCloudmersiveMalwareScanEnabled();
+  const scan = malwareScanEnabled
+    ? await scanForMalware({
+        bytes: input.bytes,
+        contentType: input.contentType,
+        originalName: input.originalName,
+      })
+    : ({ verdict: "skipped", provider: "builtin", signature: "cloudmersive_disabled" } as const);
+  if (scan.verdict === "infected") {
     throw new CvProcessingError("malware_detected", "The malware scanner rejected the document.");
   }
-  await input.onScanClean?.(sha256);
+  const scanStatus = scan.verdict === "clean" ? ("clean" as const) : ("skipped" as const);
+  await input.onSafetyChecksPassed?.(sha256, scanStatus);
 
   const extracted =
     input.contentType === "application/pdf"
@@ -48,6 +117,7 @@ export async function inspectAndExtractCv(input: {
   return {
     sha256,
     scan,
+    scanStatus,
     parsedText: normalizedText,
     extractedProfile: extractProfileSuggestions({
       text: normalizedText,
@@ -69,45 +139,77 @@ function validateMagicBytes(bytes: Buffer, contentType: string) {
   }
 }
 
-async function scanForMalware(input: {
-  bytes: Buffer;
-  contentType: string;
-  originalName: string;
-  sha256: string;
-}) {
-  const environment = getMalwareScannerEnvironment();
-  if (!environment) {
+export async function scanForMalware(
+  input: {
+    bytes: Buffer;
+    contentType: string;
+    originalName: string;
+  },
+  dependencies: { apiKey?: string; scanApi?: CloudmersiveScanApi } = {},
+) {
+  const apiKey = dependencies.apiKey ?? getCloudmersiveEnvironment()?.CLOUDMERSIVE_API_KEY;
+  if (!apiKey) {
     throw new CvProcessingError(
       "malware_scanner_unavailable",
-      "A private malware scanner must be configured before CV parsing is enabled.",
+      "Cloudmersive must be configured before CV parsing is enabled.",
     );
   }
 
-  let response: Response;
+  const scanApi = dependencies.scanApi ?? createCloudmersiveScanApi(apiKey);
+  let response: unknown;
   try {
-    response = await fetch(environment.MALWARE_SCAN_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${environment.MALWARE_SCAN_TOKEN}`,
-        "content-type": "application/octet-stream",
-        "x-content-sha256": input.sha256,
-        "x-document-content-type": input.contentType,
-        "x-document-name": encodeURIComponent(input.originalName),
-      },
-      body: new Uint8Array(input.bytes),
-      signal: AbortSignal.timeout(30_000),
+    response = await new Promise((resolve, reject) => {
+      scanApi.scanFileAdvanced(input.bytes, cloudmersiveScanOptions(input.originalName), (error, data) => {
+        if (error) reject(error);
+        else resolve(data);
+      });
     });
   } catch {
     throw new CvProcessingError("malware_scanner_error", "The malware scanner could not be reached.");
   }
-  if (!response.ok) {
-    throw new CvProcessingError("malware_scanner_error", "The malware scanner returned an error.");
-  }
-  const parsed = scannerResponseSchema.safeParse(await response.json().catch(() => null));
+
+  const parsed = cloudmersiveResponseSchema.safeParse(response);
   if (!parsed.success) {
     throw new CvProcessingError("malware_scanner_invalid_response", "The malware scanner response was invalid.");
   }
-  return parsed.data;
+
+  const signatures = [
+    ...(parsed.data.FoundViruses ?? []).map((virus) => virus.VirusName),
+    ...cloudmersiveThreatFlags.filter((flag) => parsed.data[flag] === true),
+  ];
+  const unsafe = !parsed.data.CleanResult || signatures.length > 0;
+  return {
+    verdict: unsafe ? ("infected" as const) : ("clean" as const),
+    provider: "cloudmersive",
+    ...(unsafe ? { signature: signatures.join(", ").slice(0, 160) || "unsafe_content" } : {}),
+  };
+}
+
+function createCloudmersiveScanApi(apiKey: string): CloudmersiveScanApi {
+  const client = CloudmersiveVirusApiClient.ApiClient.instance;
+  client.basePath = "https://api.cloudmersive.com";
+  client.authentications.Apikey.apiKey = apiKey;
+  client.timeout = 30_000;
+  return new CloudmersiveVirusApiClient.ScanApi(client as never) as unknown as CloudmersiveScanApi;
+}
+
+function cloudmersiveScanOptions(originalName: string): CloudmersiveAdvancedScanOptions {
+  return {
+    fileName: originalName,
+    allowExecutables: false,
+    allowInvalidFiles: false,
+    allowScripts: false,
+    allowPasswordProtectedFiles: false,
+    allowMacros: false,
+    allowXmlExternalEntities: false,
+    allowInsecureDeserialization: false,
+    allowHtml: false,
+    allowUnsafeArchives: false,
+    allowOleEmbeddedObject: false,
+    allowUnwantedAction: false,
+    options: "blockOfficeXmlOleEmbeddedFile,blockInvalidUris",
+    restrictFileTypes: ".pdf,.docx",
+  };
 }
 
 async function extractPdfText(bytes: Buffer) {

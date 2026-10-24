@@ -4,8 +4,8 @@ This runbook intentionally separates source readiness from live-service provisio
 
 ## Required production choices
 
-- **Vercel:** Pro or Enterprise. The application uses a once-per-minute dispatcher so arbitrary user-selected run minutes can be claimed promptly. Vercel Hobby supports only one cron invocation per day and hourly timing precision.
-- **Clerk:** separate development and production instances, with production redirect URLs limited to the real application domains.
+- **Vercel:** Hobby is supported for prelaunch validation. Its daily Vercel Cron is retained as a recovery safety-net, while the repository's GitHub Actions workflow invokes the same idempotent dispatcher every five minutes. Move the dispatcher to a once-per-minute Vercel Cron when the project upgrades to Pro or Enterprise.
+- **Clerk:** the development instance may be used during prelaunch validation. Before accepting real users, replace it with a production instance and limit redirect URLs to the real application domains.
 - **Neon:** separate development/preview and production branches. Use a pooled connection string for the application.
 - **Cloudflare R2:** a private bucket, a least-privilege object read/write token, and browser CORS restricted to exact application origins.
 
@@ -22,13 +22,26 @@ Do not run the development server or a database migration until the environment 
 
 ## 2. Configure secrets
 
-Create every key listed in `.env.example` in the appropriate Vercel environment. `CRON_SECRET` must be a cryptographically random value of at least 16 characters; longer is preferred. Vercel sends it to the dispatcher as a bearer token.
+Create every key listed in `.env.example` in the appropriate Vercel environment. `CRON_SECRET` must be a cryptographically random value of at least 16 characters; longer is preferred. Vercel and the external dispatcher send it to the endpoint as a bearer token.
 
 Use separate credentials for development, preview, and production. Do not expose `CLERK_SECRET_KEY`, `DATABASE_URL`, or R2 credentials through any `NEXT_PUBLIC_` variable.
 
-Configure `MALWARE_SCAN_URL` and `MALWARE_SCAN_TOKEN` for a private scanner endpoint. The application sends the raw file body plus its SHA-256 digest, declared type, and encoded filename; the endpoint must authenticate the bearer token and return JSON shaped as `{ "verdict": "clean" | "infected", "provider": "...", "signature": "..." }`. CV parsing fails closed when the scanner is absent, unreachable, or returns an invalid response.
+Malware scanning is opt-in during prelaunch. Set `CV_MALWARE_SCAN_ENABLED=false` (the default) to keep CV bytes inside JobPilot. In this mode, the application still validates PDF/DOCX file signatures, enforces upload and archive-expansion bounds, validates the DOCX package structure, limits PDF pages and image sizes, and bounds extracted text. These checks reject malformed or resource-abusive files, but they are not an antivirus verdict; the document is recorded as `scan_status=skipped`.
 
-## 3. Configure the private R2 bucket
+To enable antivirus scanning, set `CV_MALWARE_SCAN_ENABLED=true` and configure `CLOUDMERSIVE_API_KEY` as a Vercel Secret. JobPilot then uses Cloudmersive's advanced file scan, restricts accepted content to PDF and DOCX, and blocks executables, invalid files, scripts, password-protected documents, macros, unsafe archives, embedded objects, and other active-content threats. CV parsing fails closed when Cloudmersive is enabled but absent, unreachable, or returns an invalid response. The CV bytes are transmitted to Cloudmersive only in this mode, so reflect that processor in the product's privacy notice before enabling it.
+
+## 3. Configure prelaunch schedule dispatch
+
+Vercel Hobby cannot run the dispatcher more than once per day. The Vercel cron in `vercel.ts` therefore remains a daily recovery invocation, while `.github/workflows/dispatch-schedules.yml` supplies five-minute dispatch precision.
+
+In GitHub repository settings, configure:
+
+- Actions variable `JOBPILOT_CRON_URL` with the full endpoint, for example `https://jpilot-black.vercel.app/api/cron/dispatch`;
+- Actions secret `CRON_SECRET` with exactly the same value as the Vercel `CRON_SECRET`.
+
+The workflow can also be started manually from the Actions tab. GitHub scheduled workflows can be delayed, so this is appropriate for prelaunch/MVP use rather than a strict scheduling SLO. After upgrading to Vercel Pro, change the Vercel cron to `* * * * *`, remove or disable the GitHub schedule, and keep the same authenticated dispatcher endpoint.
+
+## 4. Configure the private R2 bucket
 
 Keep public bucket access disabled. Create an API token limited to the one CV bucket and only the operations required by the application.
 
@@ -51,7 +64,7 @@ Apply a CORS policy per environment. Replace the sample origins with exact URLs;
 
 The current upload contract signs one object key, content type, and content length for ten minutes. Finalization performs an authenticated tenant lookup and validates the stored length and content type before starting the durable scan/parse workflow. The CV becomes active only after the user reviews and confirms the extracted profile.
 
-## 4. Prepare Neon safely
+## 5. Prepare Neon safely
 
 1. Point `DATABASE_URL` at a disposable Neon development branch.
 2. Review all files under `drizzle/`.
@@ -59,28 +72,30 @@ The current upload contract signs one object key, content type, and content leng
 4. Run the app and exercise identity creation, tenant isolation, CV upload, schedule creation, and duplicate-request behavior.
 5. Promote the reviewed migration through the normal release process; never let a preview deployment migrate production automatically.
 
-## 5. Preview verification
+## 6. Preview verification
 
 Verify these flows with two unrelated Clerk users and, if organizations are enabled, two organizations:
 
 - public landing and sign-in/sign-up;
 - protected-page redirect while signed out;
 - no cross-tenant read, mutation, CV finalization, or Eve session access;
-- PDF and DOCX upload, signature/type mismatch, wrong size, expired URL, oversized upload, scanner failure, infected files, archive expansion limits, and user confirmation;
+- PDF and DOCX upload, signature/type mismatch, wrong size, expired URL, oversized upload, built-in validation with scanning disabled, scanner failure and infected files with scanning enabled, archive expansion limits, and user confirmation;
 - daily and weekly schedules around DST boundaries;
 - duplicate schedule request IDs and duplicate dispatcher invocations;
 - invalid and missing `CRON_SECRET`;
 - workflow retry/replay without duplicate run ownership;
 - schedules remain paused when no discovery integration is connected.
 
-## 6. Production release gate
+## 7. Production release gate
 
-Before promotion, add observability and alerts for dispatcher authorization failures, overdue schedules, workflow failures, connector degradation, R2 upload errors, and tenant-authorization denials. Confirm backup/restore, data retention/deletion, incident response, and connector terms before enabling real candidate traffic.
+Before promotion, enable Cloudmersive (or another reviewed malware-scanning provider), then add observability and alerts for dispatcher authorization failures, overdue schedules, workflow failures, scanner failures, connector degradation, R2 upload errors, and tenant-authorization denials. Confirm backup/restore, data retention/deletion, incident response, and connector terms before enabling real candidate traffic.
 
 ## References
 
 - [Vercel Cron usage and pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing)
 - [Securing Vercel Cron Jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs)
+- [Cloudmersive Virus Scan API](https://api.cloudmersive.com/docs/virus.asp)
+- [Cloudmersive Node.js client](https://github.com/Cloudmersive/Cloudmersive.APIClient.NodeJS.Virus)
 - [Vercel durable execution model](https://vercel.com/blog/a-new-programming-model-for-durable-execution)
 - [Clerk Next.js authentication](https://clerk.com/docs/reference/nextjs/app-router/auth)
 - [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)

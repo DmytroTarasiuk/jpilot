@@ -116,13 +116,13 @@ export async function beginCvProcessing(id: string) {
   return document ?? null;
 }
 
-export async function markCvParsing(id: string, sha256: string) {
+export async function markCvParsing(id: string, sha256: string, scanStatus: "clean" | "skipped") {
   await getDb()
     .update(cvDocuments)
     .set({
       sha256,
-      scanStatus: "clean",
-      scannedAt: new Date(),
+      scanStatus,
+      scannedAt: scanStatus === "clean" ? new Date() : null,
       processingStatus: "parsing",
       updatedAt: new Date(),
     })
@@ -132,6 +132,7 @@ export async function markCvParsing(id: string, sha256: string) {
 export async function completeCvProcessing(input: {
   id: string;
   sha256: string;
+  scanStatus: "clean" | "skipped";
   parsedText: string;
   extractedProfile: CvExtractedProfile;
 }) {
@@ -139,11 +140,11 @@ export async function completeCvProcessing(input: {
     .update(cvDocuments)
     .set({
       sha256: input.sha256,
-      scanStatus: "clean",
+      scanStatus: input.scanStatus,
       processingStatus: "awaiting_confirmation",
       parsedText: input.parsedText,
       extractedProfile: input.extractedProfile,
-      scannedAt: new Date(),
+      scannedAt: input.scanStatus === "clean" ? new Date() : null,
       parsedAt: new Date(),
       processingErrorCode: null,
       updatedAt: new Date(),
@@ -151,17 +152,29 @@ export async function completeCvProcessing(input: {
     .where(eq(cvDocuments.id, input.id));
 }
 
-export async function failCvProcessing(input: { id: string; errorCode: string }) {
+export async function failCvProcessing(input: {
+  id: string;
+  errorCode: string;
+  scanStatus: "pending" | "clean" | "skipped";
+}) {
   const infected = input.errorCode === "malware_detected";
   const unavailable = input.errorCode === "malware_scanner_unavailable";
+  const scannerError = input.errorCode.startsWith("malware_scanner_") && !unavailable;
+  const scanStatus = infected
+    ? "infected"
+    : unavailable
+      ? "unavailable"
+      : scannerError
+        ? "error"
+        : input.scanStatus;
   await getDb()
     .update(cvDocuments)
     .set({
       status: infected ? "quarantined" : "ready",
       processingStatus: "failed",
-      scanStatus: infected ? "infected" : unavailable ? "unavailable" : "error",
+      scanStatus,
       processingErrorCode: input.errorCode,
-      scannedAt: new Date(),
+      scannedAt: scanStatus === "clean" || scanStatus === "infected" || scanStatus === "error" ? new Date() : null,
       updatedAt: new Date(),
     })
     .where(eq(cvDocuments.id, input.id));
