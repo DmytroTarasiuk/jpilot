@@ -1,7 +1,7 @@
 import { createClerkClient } from "@clerk/backend";
 import type { AuthFn } from "eve/channels/auth";
 import { ForbiddenError } from "eve/channels/auth";
-import { canAccessAgentSession, ensureTenantIdentity } from "../db/tenancy";
+import { claimAgentSession, ensureTenantIdentity } from "../db/tenancy";
 
 export function clerkAppAuth(): AuthFn<Request> {
   return async (request) => {
@@ -26,7 +26,7 @@ export function clerkAppAuth(): AuthFn<Request> {
     const sessionId = sessionIdFromRequest(request);
     if (
       sessionId &&
-      !(await canAccessAgentSession({
+      !(await claimAgentSession({
         sessionId,
         tenantId: identity.tenantId,
         userId: identity.userId,

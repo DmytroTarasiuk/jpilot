@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb } from "./client";
 import { agentSessions, tenantMembers, tenants, users } from "./schema";
 
@@ -59,6 +59,16 @@ export async function bindAgentSession(input: {
   tenantId: string;
   userId: string;
 }) {
+  if (!(await claimAgentSession(input))) {
+    throw new Error("Agent session ownership conflict.");
+  }
+}
+
+export async function claimAgentSession(input: {
+  sessionId: string;
+  tenantId: string;
+  userId: string;
+}) {
   const db = getDb();
   await db
     .insert(agentSessions)
@@ -71,28 +81,7 @@ export async function bindAgentSession(input: {
     .where(eq(agentSessions.sessionId, input.sessionId))
     .limit(1);
 
-  if (!owner || owner.tenantId !== input.tenantId || owner.userId !== input.userId) {
-    throw new Error("Agent session ownership conflict.");
-  }
-}
-
-export async function canAccessAgentSession(input: {
-  sessionId: string;
-  tenantId: string;
-  userId: string;
-}) {
-  const [row] = await getDb()
-    .select({ sessionId: agentSessions.sessionId })
-    .from(agentSessions)
-    .where(
-      and(
-        eq(agentSessions.sessionId, input.sessionId),
-        eq(agentSessions.tenantId, input.tenantId),
-        eq(agentSessions.ownerId, input.userId),
-      ),
-    )
-    .limit(1);
-  return row !== undefined;
+  return owner?.tenantId === input.tenantId && owner.userId === input.userId;
 }
 
 function toMemberRole(
