@@ -43,6 +43,13 @@
       "when": 1792915468098,
       "tag": "0005_open_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792943810508,
+      "tag": "0006_dear_sway",
+      "breakpoints": true
     }
   ]
 }

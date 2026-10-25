@@ -45,9 +45,9 @@ export const platformCatalog: readonly PlatformCatalogEntry[] = [
   {
     key: "djinni",
     name: "Djinni",
-    description: "Discovery uses Djinni's first-party public RSS feed. Applications remain manual.",
+    description: "Discovery uses Djinni's first-party public RSS feed. JobPilot prepares a reviewed draft; submission remains manual.",
     availability: "available",
-    supportedCapabilities: { discover: true, prepare: false, submit: false, track: false },
+    supportedCapabilities: { discover: true, prepare: true, submit: false, track: true },
   },
 ] as const;
 

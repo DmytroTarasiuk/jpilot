@@ -11,6 +11,7 @@ import {
   type TargetCountryCode,
 } from "../domain/job";
 import { getActiveCvDocumentForMatching } from "./cv-documents";
+import { materializeApprovalApplication } from "./applications";
 import { getDb, type AppDatabase } from "./client";
 import {
   candidateProfiles,
@@ -98,7 +99,7 @@ export async function executeDjinniDiscoveryRun(input: {
       windowStart: context.windowStart,
       windowEnd: context.windowEnd,
     });
-    const proposed = match.shouldPropose
+    const proposal = match.shouldPropose
       ? await upsertProposal(db, {
           runId: input.runId,
           tenantId: context.tenantId,
@@ -108,7 +109,20 @@ export async function executeDjinniDiscoveryRun(input: {
           reasons: match.reasons,
           concerns: match.concerns,
         })
-      : false;
+      : null;
+    if (proposal?.belongsToRun) {
+      await materializeApprovalApplication(
+        {
+          tenantId: context.tenantId,
+          ownerId: context.ownerId,
+          proposalId: proposal.id,
+          jobPostingId: posting.id,
+          platform: "djinni",
+        },
+        db,
+      );
+    }
+    const proposed = proposal?.createdInRun ?? false;
 
     await db
       .update(jobSourceSnapshots)
@@ -434,7 +448,7 @@ async function upsertProposal(
     concerns: string[];
   },
 ) {
-  await db
+  const [inserted] = await db
     .insert(jobProposals)
     .values({
       tenantId: input.tenantId,
@@ -447,9 +461,10 @@ async function upsertProposal(
     })
     .onConflictDoNothing({
       target: [jobProposals.tenantId, jobProposals.ownerId, jobProposals.jobPostingId],
-    });
+    })
+    .returning({ id: jobProposals.id, runId: jobProposals.runId });
   const [proposal] = await db
-    .select({ runId: jobProposals.runId })
+    .select({ id: jobProposals.id, runId: jobProposals.runId })
     .from(jobProposals)
     .where(
       and(
@@ -459,5 +474,10 @@ async function upsertProposal(
       ),
     )
     .limit(1);
-  return proposal?.runId === input.runId;
+  if (!proposal) throw new Error("job_proposal_not_found_after_conflict");
+  return {
+    id: proposal.id,
+    belongsToRun: proposal.runId === input.runId,
+    createdInRun: inserted?.runId === input.runId,
+  };
 }

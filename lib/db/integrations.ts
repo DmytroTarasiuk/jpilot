@@ -53,9 +53,9 @@ export async function setDjinniIntegrationConnection(input: {
       authMode: "public_rss",
       capabilities: {
         discover: input.connected,
-        prepare: false,
+        prepare: input.connected,
         submit: false,
-        track: false,
+        track: input.connected,
       },
       lastVerifiedAt: null,
     })
@@ -70,9 +70,9 @@ export async function setDjinniIntegrationConnection(input: {
         authMode: "public_rss",
         capabilities: {
           discover: input.connected,
-          prepare: false,
+          prepare: input.connected,
           submit: false,
-          track: false,
+          track: input.connected,
         },
         lastVerifiedAt: null,
         updatedAt: now,

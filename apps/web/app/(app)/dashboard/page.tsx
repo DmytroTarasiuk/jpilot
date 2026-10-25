@@ -49,7 +49,7 @@ export default async function DashboardPage() {
   const metrics = [
     ["Proposed", summary.metrics.proposed, "New roles awaiting review", FileSearchIcon],
     ["Approval needed", summary.metrics.approvalRequired, "Applications paused for you", CircleAlertIcon],
-    ["Submitted", summary.metrics.submitted, "Applications with a receipt", CheckCircle2Icon],
+    ["Submitted", summary.metrics.submitted, "Provider receipt or user confirmation", CheckCircle2Icon],
   ] as const;
   const onboarding = [
     ["Confirm your profile and CV", "Review extracted details before activation", "/cv", summary.onboarding.profile && summary.onboarding.cv],

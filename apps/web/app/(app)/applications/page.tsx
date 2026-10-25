@@ -1,21 +1,31 @@
-import { InboxIcon } from "lucide-react";
+import { getAuthenticatedTenantIdentity } from "@jobpilot/auth/request-context";
+import { listOwnedApplications, permittedUserStatusTargets } from "@jobpilot/db/applications";
+import { redirect } from "next/navigation";
+import { ApplicationBoard, type ApplicationView } from "./application-board";
 
-export default function ApplicationsPage() {
-  return (
-    <div>
-      <p className="text-sm font-medium text-[#5f7067]">Pipeline</p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em]">Applications</h1>
-      <div className="mt-8 grid min-h-96 place-items-center rounded-2xl border border-[#d9e2dc] bg-white p-8 text-center">
-        <div>
-          <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#edf2ed] text-[#315b45]">
-            <InboxIcon className="size-6" />
-          </span>
-          <h2 className="mt-5 text-lg font-semibold">No applications yet</h2>
-          <p className="mt-2 max-w-md text-sm leading-6 text-[#748078]">
-            Proposed roles, approval requests, manual tasks, and submission receipts will appear here after your first run.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
+export default async function ApplicationsPage() {
+  const identity = await getAuthenticatedTenantIdentity();
+  if (!identity) redirect("/sign-in");
+  const applications = await listOwnedApplications({ ...identity, limit: 100 });
+  const views: ApplicationView[] = applications.map((application) => ({
+    ...application,
+    submittedAt: application.submittedAt?.toISOString() ?? null,
+    createdAt: application.createdAt.toISOString(),
+    updatedAt: application.updatedAt.toISOString(),
+    publishedAt: application.publishedAt?.toISOString() ?? null,
+    coverLetter: application.coverLetter ?? "",
+    screeningAnswers: application.screeningAnswers ?? [],
+    sourceFacts: application.sourceFacts ?? [],
+    missingFacts: application.missingFacts ?? [],
+    draftRevision: application.draftRevision ?? 0,
+    generationMode: application.generationMode ?? "unavailable",
+    canEditDraft: application.status === "approval_required" || application.status === "manual_required",
+    allowedStatusTargets: permittedUserStatusTargets(application.status),
+    events: application.events.map((event) => ({
+      ...event,
+      createdAt: event.createdAt.toISOString(),
+    })),
+  }));
+
+  return <ApplicationBoard initialApplications={views} />;
 }

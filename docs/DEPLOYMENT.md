@@ -72,6 +72,8 @@ The current upload contract signs one object key, content type, and content leng
 4. Run the app and exercise identity creation, tenant isolation, CV upload, schedule creation, and duplicate-request behavior.
 5. Promote the reviewed migration through the normal release process; never let a preview deployment migrate production automatically.
 
+Migration `0006_dear_sway.sql` introduces Phase 3 drafts and submission-attempt records. It also materializes existing Phase 2 proposals into pending, manual approval tasks so historical proposals remain reviewable instead of being silently dropped. Validate the backfilled counts on the development branch before promotion.
+
 ## 6. Preview verification
 
 Verify these flows with two unrelated Clerk users and, if organizations are enabled, two organizations:
@@ -84,6 +86,10 @@ Verify these flows with two unrelated Clerk users and, if organizations are enab
 - duplicate schedule request IDs and duplicate dispatcher invocations;
 - invalid and missing `CRON_SECRET`;
 - workflow retry/replay without duplicate run ownership;
+- proposal creation produces exactly one application, pending approval, grounded draft, and ordered timeline;
+- cross-tenant application reads and decisions return no data and make no change;
+- approve, reject, bulk review, manual deep link, draft edit, and user-confirmed status correction;
+- repeated direct-submit workflow execution reuses one provider idempotency key and one durable receipt when a reviewed adapter is available;
 - schedules remain paused when no discovery integration is connected.
 
 ## 7. Production release gate

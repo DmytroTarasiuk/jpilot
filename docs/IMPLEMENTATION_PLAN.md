@@ -156,13 +156,15 @@ Acceptance criteria: replaying a run or retrying a step creates no duplicate pro
 
 ### Phase 3 — approvals and applications
 
-- Approval inbox with approve, reject, edit, and bulk-review controls.
-- Cover-letter and screening-answer drafts grounded only in candidate-confirmed facts.
-- First compliant direct-submit adapter with idempotency and receipt capture.
-- Manual task flow for external application pages.
-- Application timeline and user correction tools.
+- [x] Approval inbox with approve, reject, edit, and bulk-review controls.
+- [x] Cover-letter and screening-answer drafts grounded only in candidate-confirmed facts.
+- [ ] First compliant direct-submit adapter with idempotency and receipt capture. The idempotent adapter contract, durable Workflow, attempt ledger, and receipt persistence are implemented, but no live adapter is registered because the current target platforms do not expose a documented applicant-side submit API to JobPilot.
+- [x] Manual task flow for external application pages.
+- [x] Application timeline and user correction tools.
 
-Acceptance criteria: no application is submitted without a per-job approval or a stored eligible standing policy; a retry cannot submit twice.
+Local acceptance covers tenant-scoped review, draft edits, manual status tracking, and direct-submission replay protection with an injected permitted adapter. A live direct submission remains disabled until provider access and terms are documented; JobPilot does not substitute browser automation.
+
+Acceptance criteria: no application is submitted without a per-job approval or a stored eligible standing policy; a retry cannot submit twice. The database and adapter contract enforce both conditions locally; deployed verification remains a release gate after migration `0006` is applied to a Neon development branch.
 
 ### Phase 4 — additional platforms and operations
 

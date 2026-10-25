@@ -105,10 +105,29 @@ export const approvalStatusEnum = pgEnum("approval_status", [
   "expired",
   "cancelled",
 ]);
+export const submissionAttemptStatusEnum = pgEnum("submission_attempt_status", [
+  "pending",
+  "submitted",
+  "failed",
+  "outcome_unknown",
+]);
 export const actorTypeEnum = pgEnum("actor_type", ["user", "agent", "system", "connector"]);
 
 export type PlatformKey = (typeof platformEnum.enumValues)[number];
 export type ApplicationStatus = (typeof applicationStatusEnum.enumValues)[number];
+export interface ApplicationSourceFact {
+  id: string;
+  label: string;
+  value: string;
+  source: "confirmed_profile" | "confirmed_cv";
+}
+
+export interface ScreeningAnswerDraft {
+  question: string;
+  answer: string | null;
+  sourceFactIds: string[];
+  needsReview: boolean;
+}
 
 export const tenants = pgTable(
   "tenants",
@@ -531,7 +550,87 @@ export const approvalRequests = pgTable(
     createdAt,
     updatedAt,
   },
-  (table) => [index("approval_requests_tenant_status_idx").on(table.tenantId, table.status)],
+  (table) => [
+    index("approval_requests_tenant_status_idx").on(table.tenantId, table.status),
+    uniqueIndex("approval_requests_one_pending_per_application_unique")
+      .on(table.applicationId)
+      .where(sql`${table.status} = 'pending'`),
+  ],
+);
+
+export const applicationDrafts = pgTable(
+  "application_drafts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    sourceCvDocumentId: uuid("source_cv_document_id").references(() => cvDocuments.id, {
+      onDelete: "set null",
+    }),
+    coverLetter: text("cover_letter").notNull(),
+    screeningAnswers: jsonb("screening_answers")
+      .$type<ScreeningAnswerDraft[]>()
+      .default([])
+      .notNull(),
+    sourceFacts: jsonb("source_facts").$type<ApplicationSourceFact[]>().default([]).notNull(),
+    missingFacts: text("missing_facts").array().default(sql`ARRAY[]::text[]`).notNull(),
+    groundingFingerprint: varchar("grounding_fingerprint", { length: 64 }).notNull(),
+    generationMode: varchar("generation_mode", { length: 32 }).default("deterministic").notNull(),
+    model: text("model"),
+    inputTokens: integer("input_tokens").default(0).notNull(),
+    outputTokens: integer("output_tokens").default(0).notNull(),
+    revision: integer("revision").default(1).notNull(),
+    lastEditedBy: text("last_edited_by"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("application_drafts_application_unique").on(table.applicationId),
+    index("application_drafts_tenant_owner_idx").on(table.tenantId, table.ownerId),
+    check("application_drafts_revision_positive", sql`${table.revision} > 0`),
+    check("application_drafts_token_counts", sql`${table.inputTokens} >= 0 AND ${table.outputTokens} >= 0`),
+  ],
+);
+
+export const applicationSubmissionAttempts = pgTable(
+  "application_submission_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    platform: platformEnum("platform").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: varchar("request_hash", { length: 64 }).notNull(),
+    status: submissionAttemptStatusEnum("status").default("pending").notNull(),
+    externalApplicationId: text("external_application_id"),
+    safeReceipt: jsonb("safe_receipt").$type<Record<string, unknown>>(),
+    failureCode: varchar("failure_code", { length: 128 }),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("application_submission_attempts_idempotency_unique").on(table.idempotencyKey),
+    index("application_submission_attempts_application_idx").on(table.applicationId, table.createdAt),
+    index("application_submission_attempts_tenant_owner_idx").on(table.tenantId, table.ownerId),
+  ],
 );
 
 export const applicationEvents = pgTable(

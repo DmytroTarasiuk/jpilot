@@ -6,7 +6,7 @@ This repository is the new production-oriented implementation. The earlier Sites
 
 ## Current state
 
-The secure foundation, Phase 1 control plane, and first Phase 2 discovery path are implemented locally:
+The secure foundation, Phase 1 control plane, Phase 2 discovery path, and the approval/manual portions of Phase 3 are implemented locally:
 
 - Next.js 16 dashboard and onboarding shell;
 - Clerk sign-in/sign-up, protected routes, and per-user/per-organization tenant mapping;
@@ -18,11 +18,15 @@ The secure foundation, Phase 1 control plane, and first Phase 2 discovery path a
 - opt-in Djinni discovery through its first-party public RSS feed;
 - canonical vacancy normalization, run-scoped source snapshots, global deduplication, tenant proposal suppression, and deterministic explainable scoring;
 - per-run found, new, duplicate, eligible, proposed, and failed counters;
+- tenant-scoped application inbox with per-job and bulk approve/reject controls;
+- deterministic cover-letter drafts sourced only from the confirmed profile, anchored to the CV active at proposal time, plus user-confirmed screening answers;
+- manual external-application handoff, append-only timelines, and user outcome corrections;
+- an approval-gated direct-submission contract, durable Workflow boundary, attempt ledger, and receipt persistence with retry idempotency;
 - application/approval state machine with idempotency and audit-oriented records;
 - tenant-bound Eve assistant sessions;
 - focused unit tests and production builds.
 
-Djinni is the only implemented discovery connector. It is discover-only: JobPilot does not automate Djinni's authenticated UI or applications. Other job boards remain planned and saved schedules activate only when they include an explicitly connected, implemented discovery source. See [the implementation plan](docs/IMPLEMENTATION_PLAN.md) for the phased delivery sequence and [the deployment guide](docs/DEPLOYMENT.md) for the environment gate.
+Djinni is the only implemented discovery connector. JobPilot prepares a grounded draft and manual deep link, but does not automate Djinni's authenticated UI or application form. No live direct-submit adapter is registered: the safety and idempotency infrastructure is ready, while provider enablement remains blocked on a documented applicant-side API or permitted partnership. Other job boards remain planned and saved schedules activate only when they include an explicitly connected, implemented discovery source. See [the implementation plan](docs/IMPLEMENTATION_PLAN.md) for the phased delivery sequence and [the deployment guide](docs/DEPLOYMENT.md) for the environment gate.
 
 ## Stack
 
@@ -65,7 +69,7 @@ workflows/             durable search-run orchestration
 
 ## Safety contract
 
-JobPilot uses official APIs or explicitly permitted integration paths. It does not bypass CAPTCHAs, anti-bot controls, access restrictions, or a platform's external application flow. Application submission is human-approved by default; unattended submission is a later, narrowly scoped capability that requires explicit user policy, verified candidate facts, a permitted connector, and an unused idempotency key.
+JobPilot uses official APIs or explicitly permitted integration paths. It does not bypass CAPTCHAs, anti-bot controls, access restrictions, or a platform's external application flow. Every current application needs per-job approval. A future unattended policy remains a separate, narrowly scoped capability that requires verified candidate facts, a permitted connector, and an unused idempotency key.
 
 ## Architecture decisions
 

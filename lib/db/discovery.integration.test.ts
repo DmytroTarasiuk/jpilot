@@ -8,6 +8,9 @@ import type { DiscoveryBatch } from "../discovery/djinni";
 import type { AppDatabase } from "./client";
 import { executeDjinniDiscoveryRun } from "./discovery";
 import {
+  applicationDrafts,
+  applications,
+  approvalRequests,
   candidateProfiles,
   jobPostings,
   jobProposals,
@@ -172,6 +175,9 @@ describe("Phase 2 discovery persistence", () => {
     });
     expect(await db.select().from(jobPostings)).toHaveLength(1);
     expect(await db.select().from(jobProposals)).toHaveLength(1);
+    expect(await db.select().from(applications)).toHaveLength(1);
+    expect(await db.select().from(approvalRequests)).toHaveLength(1);
+    expect(await db.select().from(applicationDrafts)).toHaveLength(1);
     expect(await db.select().from(jobSourceSnapshots)).toHaveLength(4);
     const [persistedFirstRun] = await db
       .select({ counters: searchRuns.counters })
