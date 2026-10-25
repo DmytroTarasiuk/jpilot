@@ -1,7 +1,7 @@
 # ADR 0003: Djinni first-party RSS discovery
 
 Status: accepted  
-Reviewed: 2026-10-24
+Reviewed: 2026-10-25
 
 ## Decision
 
@@ -9,13 +9,13 @@ Phase 2 uses Djinni's public, first-party RSS feed as JobPilot's first discovery
 
 JobPilot uses only these country-filtered endpoints:
 
-- `https://djinni.co/jobs/rss/?region=worldwide&country=POL`
-- `https://djinni.co/jobs/rss/?region=worldwide&country=UKR`
+- `https://djinni.co/jobs/rss/?country=POL`
+- `https://djinni.co/jobs/rss/?country=UKR`
 
 References:
 
-- <https://djinni.co/jobs/?region=worldwide>
-- <https://djinni.co/jobs/rss/?region=worldwide>
+- <https://djinni.co/jobs/?country=POL>
+- <https://djinni.co/jobs/?country=UKR>
 - <https://djinni.co/terms/>
 
 ## Capability and authentication

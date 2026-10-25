@@ -1,4 +1,5 @@
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -59,4 +60,11 @@ export async function downloadPrivateObject(objectKey: string) {
   );
   if (!response.Body) throw new Error("The private object has no body.");
   return Buffer.from(await response.Body.transformToByteArray());
+}
+
+export async function deletePrivateObject(objectKey: string) {
+  const { R2_BUCKET_NAME } = getR2Environment();
+  await getR2Client().send(
+    new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: objectKey }),
+  );
 }

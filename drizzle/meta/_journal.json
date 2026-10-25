@@ -36,6 +36,13 @@
       "when": 1792870811084,
       "tag": "0004_left_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792915468098,
+      "tag": "0005_open_giant_girl",
+      "breakpoints": true
     }
   ]
 }

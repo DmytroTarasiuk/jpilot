@@ -4,6 +4,7 @@ import { getCandidateProfile } from "@jobpilot/db/profiles";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ProfileForm, type ProfileFormValue } from "../profile/profile-form";
+import { CvDocumentActions } from "./document-actions";
 import { CvUploader } from "./uploader";
 
 export const metadata: Metadata = { title: "CV" };
@@ -15,7 +16,15 @@ export default async function CvPage() {
     listOwnedCvDocuments({ ...identity, limit: 10 }),
     getCandidateProfile(identity),
   ]);
-  const review = documents.find((document) => document.processingStatus === "awaiting_confirmation");
+  const activeDocument = documents.find(
+    (document) =>
+      document.isActive &&
+      document.status === "ready" &&
+      document.processingStatus === "confirmed",
+  );
+  const review = documents.find(
+    (document) => document.status === "ready" && document.processingStatus === "awaiting_confirmation",
+  );
   const initial: ProfileFormValue | null = review
     ? {
         displayName: review.extractedProfile?.displayName ?? profile?.displayName ?? "",
@@ -40,7 +49,25 @@ export default async function CvPage() {
       <p className="mt-3 text-[#68776f]">
         Upload the version used for matching and applications. Files remain private and downloads use short-lived links.
       </p>
-      <div className="mt-8">
+      <section className={`mt-8 rounded-2xl border p-6 ${activeDocument ? "border-[#a8c7b3] bg-[#f3faf5]" : "border-amber-200 bg-amber-50"}`}>
+        <p className={`text-sm font-medium ${activeDocument ? "text-[#42634f]" : "text-amber-800"}`}>Active CV</p>
+        {activeDocument ? (
+          <>
+            <h2 className="mt-1 text-xl font-semibold">{activeDocument.originalName}</h2>
+            <p className="mt-2 text-sm leading-6 text-[#68776f]">
+              Job matching uses this confirmed document together with your saved profile preferences.
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 className="mt-1 text-xl font-semibold">No CV selected</h2>
+            <p className="mt-2 text-sm leading-6 text-amber-900">
+              Confirm a processed CV or choose one from the history below before running matching.
+            </p>
+          </>
+        )}
+      </section>
+      <div className="mt-6">
         <CvUploader />
       </div>
       {review && initial ? (
@@ -72,19 +99,25 @@ export default async function CvPage() {
         {documents.length ? (
           <div className="mt-4 divide-y divide-[#e7ece8]">
             {documents.map((document) => (
-              <article className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between" key={document.id}>
+              <article className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" key={document.id}>
                 <div>
                   <p className="font-medium">{document.originalName}</p>
                   <p className="mt-1 text-xs text-[#748078]">
                     {(document.sizeBytes / 1024).toFixed(0)} KB · {new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(document.createdAt)}
                   </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <StatusBadge label={document.scanStatus.replaceAll("_", " ")} tone={document.scanStatus === "clean" ? "good" : document.scanStatus === "infected" || document.scanStatus === "error" ? "bad" : "neutral"} />
+                    <StatusBadge label={document.status === "deleting" ? "deletion pending" : document.processingStatus.replaceAll("_", " ")} tone={document.status === "deleting" || document.processingStatus === "failed" ? "bad" : document.processingStatus === "confirmed" ? "good" : "neutral"} />
+                    {document.isActive ? <StatusBadge label="active" tone="good" /> : null}
+                  </div>
+                  {document.processingErrorCode ? <p className="mt-2 text-xs text-red-700">{humanizeProcessingError(document.processingErrorCode)}</p> : null}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <StatusBadge label={document.scanStatus.replaceAll("_", " ")} tone={document.scanStatus === "clean" ? "good" : document.scanStatus === "infected" || document.scanStatus === "error" ? "bad" : "neutral"} />
-                  <StatusBadge label={document.processingStatus.replaceAll("_", " ")} tone={document.processingStatus === "confirmed" ? "good" : document.processingStatus === "failed" ? "bad" : "neutral"} />
-                  {document.isActive ? <StatusBadge label="active" tone="good" /> : null}
-                </div>
-                {document.processingErrorCode ? <p className="text-xs text-red-700">{humanizeProcessingError(document.processingErrorCode)}</p> : null}
+                <CvDocumentActions
+                  canActivate={document.status === "ready" && document.processingStatus === "confirmed" && !document.isActive}
+                  deletionPending={document.status === "deleting"}
+                  documentId={document.id}
+                  documentName={document.originalName}
+                />
               </article>
             ))}
           </div>

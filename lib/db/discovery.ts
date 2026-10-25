@@ -10,10 +10,10 @@ import {
   type NormalizedVacancy,
   type TargetCountryCode,
 } from "../domain/job";
+import { getActiveCvDocumentForMatching } from "./cv-documents";
 import { getDb, type AppDatabase } from "./client";
 import {
   candidateProfiles,
-  cvDocuments,
   jobPostings,
   jobProposals,
   jobSourceSnapshots,
@@ -127,6 +127,20 @@ export async function executeDjinniDiscoveryRun(input: {
   }
 
   const counters = await recalculateSearchRunCounters(db, input.runId);
+  const diagnosticCounters = {
+    ...counters,
+    sourceFeedsRequested: batch.diagnostics.feedsRequested,
+    sourceItemsRetrieved: batch.diagnostics.sourceItemsRetrieved,
+    sourceItemsParsed: batch.diagnostics.sourceItemsParsed,
+    sourceItemsMalformed: batch.diagnostics.sourceItemsMalformed,
+    rejectedOutsideRunWindow: batch.diagnostics.rejectedOutsideRunWindow,
+    rejectedDuplicateInBatch: batch.diagnostics.rejectedDuplicateInBatch,
+    recordsSelected: batch.diagnostics.recordsSelected,
+  };
+  await db
+    .update(searchRuns)
+    .set({ counters: diagnosticCounters, updatedAt: new Date() })
+    .where(eq(searchRuns.id, input.runId));
   await db
     .update(platformIntegrations)
     .set({ lastVerifiedAt: new Date(), updatedAt: new Date() })
@@ -138,7 +152,7 @@ export async function executeDjinniDiscoveryRun(input: {
         eq(platformIntegrations.status, "connected"),
       ),
     );
-  return counters;
+  return diagnosticCounters;
 }
 
 export async function recalculateSearchRunCounters(
@@ -197,7 +211,7 @@ async function loadDiscoveryContext(db: AppDatabase, runId: string) {
     .limit(1);
   if (!run) throw new Error("djinni_discovery_context_not_found");
 
-  const [profiles, documents] = await Promise.all([
+  const [profiles, activeDocument] = await Promise.all([
     db
       .select()
       .from(candidateProfiles)
@@ -208,18 +222,10 @@ async function loadDiscoveryContext(db: AppDatabase, runId: string) {
         ),
       )
       .limit(1),
-    db
-      .select({ parsedText: cvDocuments.parsedText })
-      .from(cvDocuments)
-      .where(
-        and(
-          eq(cvDocuments.tenantId, run.tenantId),
-          eq(cvDocuments.ownerId, run.ownerId),
-          eq(cvDocuments.isActive, true),
-          eq(cvDocuments.processingStatus, "confirmed"),
-        ),
-      )
-      .limit(1),
+    getActiveCvDocumentForMatching(
+      { tenantId: run.tenantId, ownerId: run.ownerId },
+      db,
+    ),
   ]);
   const profile = profiles[0];
   const targetCountries = run.targetCountries.filter(
@@ -238,7 +244,7 @@ async function loadDiscoveryContext(db: AppDatabase, runId: string) {
       languages: profile?.languages ?? [],
       excludedCompanies: profile?.excludedCompanies ?? [],
       salaryMin: profile?.salaryMin ?? null,
-      cvText: documents[0]?.parsedText ?? null,
+      cvText: activeDocument?.parsedText ?? null,
     },
   };
 }

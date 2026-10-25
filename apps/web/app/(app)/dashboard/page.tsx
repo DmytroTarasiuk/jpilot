@@ -132,6 +132,11 @@ export default async function DashboardPage() {
                       <span key={key}><strong className="text-[#34483d]">{run.counters[key] ?? 0}</strong> {label}</span>
                     ))}
                   </div>
+                  {(run.counters.rejectedOutsideRunWindow ?? 0) > 0 ? (
+                    <p className="mt-2 text-xs text-[#78857e]">
+                      {run.counters.rejectedOutsideRunWindow} source items were outside this run window.
+                    </p>
+                  ) : null}
                 </div>
                 <span className="w-fit rounded-full bg-[#edf2ec] px-3 py-1 text-xs font-semibold text-[#4b6054]">{runLabels[run.status] ?? run.status}</span>
               </div>

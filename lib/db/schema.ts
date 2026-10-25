@@ -42,6 +42,7 @@ export const cvStatusEnum = pgEnum("cv_status", [
   "pending_upload",
   "ready",
   "quarantined",
+  "deleting",
   "deleted",
 ]);
 export const cvProcessingStatusEnum = pgEnum("cv_processing_status", [
@@ -209,12 +210,16 @@ export const cvDocuments = pgTable(
     scannedAt: timestamp("scanned_at", { withTimezone: true, mode: "date" }),
     parsedAt: timestamp("parsed_at", { withTimezone: true, mode: "date" }),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "date" }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true, mode: "date" }),
     createdAt,
     updatedAt,
   },
   (table) => [
     uniqueIndex("cv_documents_object_key_unique").on(table.objectKey),
     uniqueIndex("cv_documents_workflow_run_unique").on(table.workflowRunId),
+    uniqueIndex("cv_documents_one_active_per_owner_unique")
+      .on(table.tenantId, table.ownerId)
+      .where(sql`${table.isActive} = true`),
     index("cv_documents_tenant_owner_idx").on(table.tenantId, table.ownerId),
     check("cv_documents_size_positive", sql`${table.sizeBytes} > 0`),
   ],

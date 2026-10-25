@@ -56,7 +56,9 @@ async function discoverPlatformStep(runId: string, platform: PlatformKey) {
   if (platform !== "djinni") throw new FatalError(`unsupported_discovery_platform:${platform}`);
   try {
     const { executeDjinniDiscoveryRun } = await import("../lib/db/discovery");
-    return await executeDjinniDiscoveryRun({ runId });
+    const counters = await executeDjinniDiscoveryRun({ runId });
+    console.info("discovery and matching completed", { runId, platform, counters });
+    return counters;
   } catch (error) {
     if (error instanceof Error && error.name === "DjinniDiscoveryError") {
       const details = error as Error & { retryable?: boolean; retryAfterMs?: number };

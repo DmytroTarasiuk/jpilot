@@ -121,12 +121,21 @@ describe("Phase 2 discovery persistence", () => {
       failures: [
         {
           externalId: "invalid:missing-date",
-          sourceUrl: "https://djinni.co/jobs/rss/?region=worldwide&country=POL",
+          sourceUrl: "https://djinni.co/jobs/rss/?country=POL",
           sourcePayload: { title: "Malformed feed item" },
           failureCode: "publication_date_missing_or_invalid",
           contentHash: "e".repeat(64),
         },
       ],
+      diagnostics: {
+        feedsRequested: 1,
+        sourceItemsRetrieved: 2,
+        sourceItemsParsed: 1,
+        sourceItemsMalformed: 1,
+        rejectedOutsideRunWindow: 0,
+        rejectedDuplicateInBatch: 0,
+        recordsSelected: 1,
+      },
     };
     const discover = vi.fn(async () => batch);
     const productionDb = db as unknown as AppDatabase;
@@ -139,9 +148,28 @@ describe("Phase 2 discovery persistence", () => {
       discover,
     });
 
-    expect(first).toEqual({ found: 2, new: 1, duplicate: 0, eligible: 1, proposed: 1, failed: 1 });
+    expect(first).toEqual({
+      found: 2,
+      new: 1,
+      duplicate: 0,
+      eligible: 1,
+      proposed: 1,
+      failed: 1,
+      sourceFeedsRequested: 1,
+      sourceItemsRetrieved: 2,
+      sourceItemsParsed: 1,
+      sourceItemsMalformed: 1,
+      rejectedOutsideRunWindow: 0,
+      rejectedDuplicateInBatch: 0,
+      recordsSelected: 1,
+    });
     expect(replay).toEqual(first);
-    expect(repeated).toEqual({ found: 2, new: 0, duplicate: 1, eligible: 1, proposed: 0, failed: 1 });
+    expect(repeated).toEqual({
+      ...first,
+      new: 0,
+      duplicate: 1,
+      proposed: 0,
+    });
     expect(await db.select().from(jobPostings)).toHaveLength(1);
     expect(await db.select().from(jobProposals)).toHaveLength(1);
     expect(await db.select().from(jobSourceSnapshots)).toHaveLength(4);

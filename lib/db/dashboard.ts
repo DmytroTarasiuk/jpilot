@@ -63,6 +63,7 @@ export async function getDashboardSummary(input: { tenantId: string; ownerId: st
           and(
             eq(cvDocuments.tenantId, input.tenantId),
             eq(cvDocuments.ownerId, input.ownerId),
+            eq(cvDocuments.status, "ready"),
             eq(cvDocuments.isActive, true),
             eq(cvDocuments.processingStatus, "confirmed"),
           ),
