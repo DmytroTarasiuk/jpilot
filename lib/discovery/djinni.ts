@@ -22,6 +22,17 @@ export interface DiscoveryBatch {
   platform: "djinni";
   records: SourceVacancy[];
   failures: DiscoveryFailure[];
+  diagnostics: DiscoveryDiagnostics;
+}
+
+export interface DiscoveryDiagnostics {
+  feedsRequested: number;
+  sourceItemsRetrieved: number;
+  sourceItemsParsed: number;
+  sourceItemsMalformed: number;
+  rejectedOutsideRunWindow: number;
+  rejectedDuplicateInBatch: number;
+  recordsSelected: number;
 }
 
 export class DjinniDiscoveryError extends Error {
@@ -76,16 +87,20 @@ export async function discoverDjinniVacancies(
 
   const failures = countryResults.flatMap((result) => result.failures);
   const records = new Map<string, SourceVacancy>();
-  for (const record of countryResults.flatMap((result) => result.records)) {
+  const parsedRecords = countryResults.flatMap((result) => result.records);
+  let rejectedOutsideRunWindow = 0;
+  let rejectedDuplicateInBatch = 0;
+  for (const record of parsedRecords) {
     const publishedAt = record.publishedAt ? new Date(record.publishedAt) : null;
-    if (
-      publishedAt &&
-      publishedAt >= input.windowStart &&
-      publishedAt < input.windowEnd &&
-      !records.has(record.externalId)
-    ) {
-      records.set(record.externalId, record);
+    if (!publishedAt || publishedAt < input.windowStart || publishedAt >= input.windowEnd) {
+      rejectedOutsideRunWindow += 1;
+      continue;
     }
+    if (records.has(record.externalId)) {
+      rejectedDuplicateInBatch += 1;
+      continue;
+    }
+    records.set(record.externalId, record);
   }
 
   const limitedRecords = [...records.values()]
@@ -94,7 +109,16 @@ export async function discoverDjinniVacancies(
   return {
     platform: "djinni",
     records: limitedRecords,
-    failures: failures.slice(0, Math.max(0, input.limit - limitedRecords.length)),
+    failures,
+    diagnostics: {
+      feedsRequested: input.targetCountries.length,
+      sourceItemsRetrieved: parsedRecords.length + failures.length,
+      sourceItemsParsed: parsedRecords.length,
+      sourceItemsMalformed: failures.length,
+      rejectedOutsideRunWindow,
+      rejectedDuplicateInBatch,
+      recordsSelected: limitedRecords.length,
+    },
   };
 }
 
@@ -174,7 +198,6 @@ export function parseDjinniFeed(
 
 export function buildDjinniFeedUrl(countryCode: TargetCountryCode) {
   const url = new URL(DJINNI_RSS_URL);
-  url.searchParams.set("region", "worldwide");
   url.searchParams.set("country", djinniCountry[countryCode]);
   return url.toString();
 }
