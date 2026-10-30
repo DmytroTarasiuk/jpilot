@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DirectSubmissionAdapter } from "../applications/adapters/types";
 import { submitApprovedApplication } from "../applications/submission";
 import type { AppDatabase } from "./client";
+import { getDashboardSummary } from "./dashboard";
 import {
   correctApplicationStatus,
   decideApplication,
@@ -55,6 +56,9 @@ describe("Phase 3 application lifecycle", () => {
       platform: "djinni" as const,
     };
 
+    const beforeMaterialization = await getDashboardSummary(input, productionDb);
+    expect(beforeMaterialization.metrics.proposed).toBe(0);
+
     await materializeApprovalApplication(input, productionDb);
     await materializeApprovalApplication(input, productionDb);
 
@@ -78,6 +82,8 @@ describe("Phase 3 application lifecycle", () => {
       "proposed",
       "approval_required",
     ]);
+    const dashboard = await getDashboardSummary(input, productionDb);
+    expect(dashboard.metrics).toMatchObject({ proposed: 1, approvalRequired: 1 });
     expect(await db.select().from(applications)).toHaveLength(1);
     expect(await db.select().from(approvalRequests)).toHaveLength(1);
     expect(await db.select().from(applicationDrafts)).toHaveLength(1);

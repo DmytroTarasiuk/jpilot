@@ -1,27 +1,28 @@
 import { and, asc, count, eq, inArray, isNotNull } from "drizzle-orm";
-import { getDb } from "./client";
+import { getDb, type AppDatabase } from "./client";
 import {
   applications,
   approvalRequests,
   candidateProfiles,
   cvDocuments,
-  jobProposals,
   platformIntegrations,
   searchSchedules,
 } from "./schema";
 
-export async function getDashboardSummary(input: { tenantId: string; ownerId: string }) {
-  const db = getDb();
+export async function getDashboardSummary(
+  input: { tenantId: string; ownerId: string },
+  db: AppDatabase = getDb(),
+) {
   const [proposalCount, approvalCount, submittedCount, profile, activeCv, schedules, integrations] =
     await Promise.all([
       db
         .select({ value: count() })
-        .from(jobProposals)
+        .from(applications)
         .where(
           and(
-            eq(jobProposals.tenantId, input.tenantId),
-            eq(jobProposals.ownerId, input.ownerId),
-            inArray(jobProposals.status, ["proposed", "approval_required"]),
+            eq(applications.tenantId, input.tenantId),
+            eq(applications.ownerId, input.ownerId),
+            inArray(applications.status, ["proposed", "approval_required"]),
           ),
         ),
       db

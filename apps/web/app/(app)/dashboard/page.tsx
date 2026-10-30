@@ -47,9 +47,9 @@ export default async function DashboardPage() {
     listSearchRuns({ ...identity, limit: 5 }),
   ]);
   const metrics = [
-    ["Proposed", summary.metrics.proposed, "New roles awaiting review", FileSearchIcon],
-    ["Approval needed", summary.metrics.approvalRequired, "Applications paused for you", CircleAlertIcon],
-    ["Submitted", summary.metrics.submitted, "Provider receipt or user confirmation", CheckCircle2Icon],
+    ["Proposed", summary.metrics.proposed, "New roles awaiting review", FileSearchIcon, "/applications"],
+    ["Approval needed", summary.metrics.approvalRequired, "Applications paused for you", CircleAlertIcon, "/applications"],
+    ["Submitted", summary.metrics.submitted, "Provider receipt or user confirmation", CheckCircle2Icon, "/applications"],
   ] as const;
   const onboarding = [
     ["Confirm your profile and CV", "Review extracted details before activation", "/cv", summary.onboarding.profile && summary.onboarding.cv],
@@ -70,14 +70,22 @@ export default async function DashboardPage() {
       </div>
 
       <section aria-label="Application summary" className="mt-8 grid gap-4 md:grid-cols-3">
-        {metrics.map(([label, value, description, Icon]) => (
-          <article className="rounded-2xl border border-[#dce4df] bg-white p-5" key={label}>
+        {metrics.map(([label, value, description, Icon, href]) => (
+          <Link
+            aria-label={`${label}: ${value}. ${description}. View role details.`}
+            className="group rounded-2xl border border-[#dce4df] bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#9eb3a6] hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#27563f]"
+            href={href}
+            key={label}
+          >
             <div className="flex items-start justify-between">
               <div><p className="text-sm text-[#68776f]">{label}</p><p className="mt-2 text-4xl font-semibold tracking-tight">{value}</p></div>
               <span className="grid size-10 place-items-center rounded-xl bg-[#eef3ee] text-[#27563f]"><Icon className="size-5" /></span>
             </div>
-            <p className="mt-5 text-sm text-[#7b8881]">{description}</p>
-          </article>
+            <span className="mt-5 flex items-center justify-between gap-3 text-sm text-[#7b8881]">
+              <span>{description}</span>
+              <span className="inline-flex shrink-0 items-center gap-1 font-semibold text-[#27563f]">View roles <ArrowUpRightIcon className="size-4 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" /></span>
+            </span>
+          </Link>
         ))}
       </section>
 
