@@ -112,6 +112,15 @@ export const submissionAttemptStatusEnum = pgEnum("submission_attempt_status", [
   "outcome_unknown",
 ]);
 export const actorTypeEnum = pgEnum("actor_type", ["user", "agent", "system", "connector"]);
+export const connectorHealthEnum = pgEnum("connector_health", ["healthy", "degraded", "open"]);
+export const notificationSeverityEnum = pgEnum("notification_severity", ["info", "warning", "error"]);
+export const notificationDeliveryStatusEnum = pgEnum("notification_delivery_status", [
+  "pending",
+  "sending",
+  "sent",
+  "failed",
+  "skipped",
+]);
 
 export type PlatformKey = (typeof platformEnum.enumValues)[number];
 export type ApplicationStatus = (typeof applicationStatusEnum.enumValues)[number];
@@ -273,6 +282,33 @@ export const platformIntegrations = pgTable(
       table.ownerId,
       table.platform,
     ),
+  ],
+);
+
+// One row per upstream source coordinates process-independent rate limits and
+// circuit state across all tenants and Vercel function instances.
+export const connectorRuntimeStates = pgTable(
+  "connector_runtime_states",
+  {
+    platform: platformEnum("platform").primaryKey(),
+    health: connectorHealthEnum("health").default("healthy").notNull(),
+    consecutiveFailures: integer("consecutive_failures").default(0).notNull(),
+    nextRequestAt: timestamp("next_request_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    circuitOpenUntil: timestamp("circuit_open_until", { withTimezone: true, mode: "date" }),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true, mode: "date" }),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true, mode: "date" }),
+    lastFailureAt: timestamp("last_failure_at", { withTimezone: true, mode: "date" }),
+    lastFailureCode: varchar("last_failure_code", { length: 128 }),
+    lastLatencyMs: integer("last_latency_ms"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("connector_runtime_states_health_idx").on(table.health, table.circuitOpenUntil),
+    check("connector_runtime_states_failures_nonnegative", sql`${table.consecutiveFailures} >= 0`),
+    check("connector_runtime_states_latency_nonnegative", sql`${table.lastLatencyMs} IS NULL OR ${table.lastLatencyMs} >= 0`),
   ],
 );
 
@@ -672,6 +708,119 @@ export const agentSessions = pgTable(
     updatedAt,
   },
   (table) => [index("agent_sessions_tenant_owner_idx").on(table.tenantId, table.ownerId)],
+);
+
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emailEnabled: boolean("email_enabled").default(false).notNull(),
+    emailAddress: text("email_address"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.ownerId], name: "notification_preferences_pk" }),
+    check(
+      "notification_preferences_email_destination",
+      sql`${table.emailEnabled} = false OR ${table.emailAddress} IS NOT NULL`,
+    ),
+  ],
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: varchar("type", { length: 64 }).notNull(),
+    severity: notificationSeverityEnum("severity").default("info").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    actionHref: text("action_href"),
+    dedupeKey: text("dedupe_key").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}).notNull(),
+    readAt: timestamp("read_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("notifications_tenant_owner_dedupe_unique").on(
+      table.tenantId,
+      table.ownerId,
+      table.dedupeKey,
+    ),
+    index("notifications_tenant_owner_created_idx").on(
+      table.tenantId,
+      table.ownerId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const notificationDeliveries = pgTable(
+  "notification_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    notificationId: uuid("notification_id")
+      .notNull()
+      .references(() => notifications.id, { onDelete: "cascade" }),
+    channel: varchar("channel", { length: 32 }).notNull(),
+    destination: text("destination").notNull(),
+    status: notificationDeliveryStatusEnum("status").default("pending").notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    providerMessageId: text("provider_message_id"),
+    failureCode: varchar("failure_code", { length: 128 }),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("notification_deliveries_notification_channel_unique").on(
+      table.notificationId,
+      table.channel,
+    ),
+    index("notification_deliveries_pending_idx").on(table.status, table.nextAttemptAt),
+    check("notification_deliveries_attempts_nonnegative", sql`${table.attemptCount} >= 0`),
+  ],
+);
+
+export const supportGrants = pgTable(
+  "support_grants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    grantedBy: uuid("granted_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    supportPrincipal: text("support_principal").notNull(),
+    permissions: text("permissions").array().notNull(),
+    reason: text("reason").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("support_grants_tenant_created_idx").on(table.tenantId, table.createdAt),
+    index("support_grants_principal_expiry_idx").on(table.supportPrincipal, table.expiresAt),
+    check("support_grants_nonempty_permissions", sql`cardinality(${table.permissions}) > 0`),
+    check("support_grants_future_window", sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
 );
 
 export const auditEvents = pgTable(

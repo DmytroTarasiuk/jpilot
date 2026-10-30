@@ -2,7 +2,7 @@ import { getAuthenticatedTenantIdentity } from "@jobpilot/auth/request-context";
 import { listPlatformIntegrations } from "@jobpilot/db/integrations";
 import { CircleDashedIcon } from "lucide-react";
 import { redirect } from "next/navigation";
-import { updateDjinniConnection } from "./actions";
+import { updatePublicFeedConnection } from "./actions";
 
 export default async function IntegrationsPage() {
   const identity = await getAuthenticatedTenantIdentity();
@@ -34,13 +34,21 @@ export default async function IntegrationsPage() {
                 </span>
               ))}
             </div>
-            {platform.key === "djinni" && platform.availability === "available" ? (
-              <form action={updateDjinniConnection}>
-                <input name="intent" type="hidden" value={platform.status === "connected" ? "disconnect" : "connect"} />
-                <button className="mt-5 rounded-full border px-4 py-2 text-sm font-medium" type="submit">
-                  {platform.status === "connected" ? "Disconnect" : "Connect RSS feed"}
-                </button>
-              </form>
+            {platform.availability === "available" && (platform.key === "djinni" || platform.key === "dou") ? (
+              <>
+                <div className="mt-4 rounded-xl bg-[#f5f7f4] p-3 text-xs leading-5 text-[#647168]">
+                  Connector health: <strong className={platform.connectorHealth === "healthy" ? "text-emerald-700" : "text-amber-700"}>{platform.connectorHealth}</strong>
+                  {platform.lastFailureCode ? <span className="block">Last failure: {platform.lastFailureCode}</span> : null}
+                  {platform.circuitOpenUntil ? <span className="block">Automatic retry after {platform.circuitOpenUntil.toISOString()}</span> : null}
+                </div>
+                <form action={updatePublicFeedConnection}>
+                  <input name="intent" type="hidden" value={platform.status === "connected" ? "disconnect" : "connect"} />
+                  <input name="platform" type="hidden" value={platform.key} />
+                  <button className="mt-5 rounded-full border px-4 py-2 text-sm font-medium" type="submit">
+                    {platform.status === "connected" ? "Disconnect" : "Connect RSS feed"}
+                  </button>
+                </form>
+              </>
             ) : (
               <button className="mt-5 rounded-full border px-4 py-2 text-sm font-medium opacity-50" disabled type="button">
                 Planned

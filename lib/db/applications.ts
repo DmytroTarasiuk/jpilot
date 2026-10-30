@@ -20,6 +20,7 @@ import {
   jobProposals,
   type ApplicationSourceFact,
   type ApplicationStatus,
+  type PlatformKey,
   type ScreeningAnswerDraft,
 } from "./schema";
 
@@ -29,7 +30,7 @@ interface Identity {
 }
 
 export async function materializeApprovalApplication(
-  input: Identity & { proposalId: string; jobPostingId: string; platform: "djinni" },
+  input: Identity & { proposalId: string; jobPostingId: string; platform: PlatformKey },
   db: AppDatabase = getDb(),
 ) {
   const idempotencyKey = `application:${input.tenantId}:${input.ownerId}:${input.jobPostingId}`;

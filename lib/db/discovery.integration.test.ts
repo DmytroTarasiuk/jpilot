@@ -4,9 +4,9 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DiscoveryBatch } from "../discovery/djinni";
+import type { DiscoveryBatch } from "../discovery/types";
 import type { AppDatabase } from "./client";
-import { executeDjinniDiscoveryRun } from "./discovery";
+import { executeDjinniDiscoveryRun, executeDouDiscoveryRun } from "./discovery";
 import {
   applicationDrafts,
   applications,
@@ -151,7 +151,7 @@ describe("Phase 2 discovery persistence", () => {
       discover,
     });
 
-    expect(first).toEqual({
+    expect(first).toMatchObject({
       found: 2,
       new: 1,
       duplicate: 0,
@@ -184,5 +184,112 @@ describe("Phase 2 discovery persistence", () => {
       .from(searchRuns)
       .where(eq(searchRuns.id, firstRunId));
     expect(persistedFirstRun?.counters).toEqual(first);
+  });
+
+  it("persists and deduplicates DOU discovery across repeated runs", async () => {
+    const tenantId = randomUUID();
+    const ownerId = randomUUID();
+    const scheduleId = randomUUID();
+    const firstRunId = randomUUID();
+    const repeatedRunId = randomUUID();
+    const windowStart = new Date("2026-10-24T00:00:00.000Z");
+    const windowEnd = new Date("2026-10-25T00:00:00.000Z");
+    await db.insert(tenants).values({ id: tenantId, externalKey: "tenant:dou", name: "DOU" });
+    await db.insert(users).values({ id: ownerId, clerkUserId: "user_dou" });
+    await db.insert(candidateProfiles).values({
+      tenantId,
+      ownerId,
+      headline: "Senior Software Engineer",
+      targetCountries: ["PL"],
+      targetTitles: ["Software Engineer"],
+      workModes: ["remote", "hybrid", "onsite"],
+      languages: ["English"],
+      excludedCompanies: [],
+      confirmedAt: new Date("2026-10-20T00:00:00.000Z"),
+    });
+    await db.insert(searchSchedules).values({
+      id: scheduleId,
+      tenantId,
+      ownerId,
+      name: "DOU discovery",
+      idempotencyKey: "dou-schedule",
+      cadence: "daily",
+      timezone: "Europe/Warsaw",
+      localTime: "08:00",
+      targetCountries: ["PL"],
+      desiredEnabled: true,
+      enabled: true,
+      nextRunAt: windowEnd,
+    });
+    await db.insert(schedulePlatforms).values({
+      scheduleId,
+      platform: "dou",
+      searchLimit: 25,
+      autoApplyLimit: 0,
+    });
+    await db.insert(searchRuns).values([
+      {
+        id: firstRunId,
+        tenantId,
+        ownerId,
+        scheduleId,
+        trigger: "manual",
+        status: "running",
+        idempotencyKey: "dou-run-1",
+        scheduledFor: windowEnd,
+        windowStart,
+        windowEnd,
+      },
+      {
+        id: repeatedRunId,
+        tenantId,
+        ownerId,
+        scheduleId,
+        trigger: "manual",
+        status: "running",
+        idempotencyKey: "dou-run-2",
+        scheduledFor: windowEnd,
+        windowStart,
+        windowEnd,
+      },
+    ]);
+    const batch: DiscoveryBatch = {
+      platform: "dou",
+      records: [{
+        platform: "dou",
+        externalId: "378453",
+        sourceUrl: "https://jobs.dou.ua/companies/acme/vacancies/378453/",
+        countryCode: "PL",
+        title: "Senior Software Engineer",
+        company: "Acme",
+        city: "Warszawa",
+        descriptionHtml: "<p>TypeScript, Node.js, PostgreSQL and AWS.</p>",
+        publishedAt: "2026-10-24T10:00:00.000Z",
+        categories: [],
+        sourcePayload: { guid: "378453", feedUrl: "https://jobs.dou.ua/vacancies/feeds/" },
+      }],
+      failures: [],
+      diagnostics: {
+        feedsRequested: 1,
+        sourceItemsRetrieved: 1,
+        sourceItemsParsed: 1,
+        sourceItemsMalformed: 0,
+        rejectedOutsideRunWindow: 0,
+        rejectedDuplicateInBatch: 0,
+        rejectedCountryNotSelected: 0,
+        rejectedUnsupportedCountry: 0,
+        recordsSelected: 1,
+      },
+    };
+    const discover = vi.fn(async () => batch);
+    const productionDb = db as unknown as AppDatabase;
+    const first = await executeDouDiscoveryRun({ runId: firstRunId, db: productionDb, discover });
+    const repeated = await executeDouDiscoveryRun({ runId: repeatedRunId, db: productionDb, discover });
+    expect(first).toMatchObject({ found: 1, new: 1, duplicate: 0, eligible: 1, proposed: 1, failed: 0 });
+    expect(repeated).toMatchObject({ found: 1, new: 0, duplicate: 1, eligible: 1, proposed: 0, failed: 0 });
+    expect(await db.select().from(jobPostings)).toHaveLength(1);
+    expect(await db.select().from(jobProposals)).toHaveLength(1);
+    expect(await db.select().from(applications)).toHaveLength(1);
+    expect(await db.select().from(jobSourceSnapshots)).toHaveLength(2);
   });
 });

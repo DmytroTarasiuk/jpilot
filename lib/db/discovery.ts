@@ -1,8 +1,7 @@
 import { and, eq } from "drizzle-orm";
-import {
-  discoverDjinniVacancies,
-  type DiscoveryBatch,
-} from "../discovery/djinni";
+import { discoverDjinniVacancies } from "../discovery/djinni";
+import { discoverDouVacancies } from "../discovery/dou";
+import type { DiscoveryAdapter, DiscoveryBatch, DiscoveryPlatform } from "../discovery/types";
 import {
   normalizeVacancy,
   scoreVacancy,
@@ -22,6 +21,7 @@ import {
   schedulePlatforms,
   searchRuns,
   searchSchedules,
+  type PlatformKey,
 } from "./schema";
 
 export interface SearchRunCounters {
@@ -34,17 +34,39 @@ export interface SearchRunCounters {
   failed: number;
 }
 
-type DiscoverDjinni = typeof discoverDjinniVacancies;
-
 export async function executeDjinniDiscoveryRun(input: {
   runId: string;
   db?: AppDatabase;
-  discover?: DiscoverDjinni;
+  discover?: typeof discoverDjinniVacancies;
+}) {
+  return executeDiscoveryRun({
+    ...input,
+    platform: "djinni",
+    discover: input.discover ?? discoverDjinniVacancies,
+  });
+}
+
+export async function executeDouDiscoveryRun(input: {
+  runId: string;
+  db?: AppDatabase;
+  discover?: typeof discoverDouVacancies;
+}) {
+  return executeDiscoveryRun({
+    ...input,
+    platform: "dou",
+    discover: input.discover ?? discoverDouVacancies,
+  });
+}
+
+export async function executeDiscoveryRun(input: {
+  runId: string;
+  platform: DiscoveryPlatform;
+  db?: AppDatabase;
+  discover: DiscoveryAdapter;
 }) {
   const db = input.db ?? getDb();
-  const context = await loadDiscoveryContext(db, input.runId);
-  const discover = input.discover ?? discoverDjinniVacancies;
-  const batch = await discover({
+  const context = await loadDiscoveryContext(db, input.runId, input.platform);
+  const batch = await input.discover({
     targetCountries: context.targetCountries,
     windowStart: context.windowStart,
     windowEnd: context.windowEnd,
@@ -117,7 +139,7 @@ export async function executeDjinniDiscoveryRun(input: {
           ownerId: context.ownerId,
           proposalId: proposal.id,
           jobPostingId: posting.id,
-          platform: "djinni",
+          platform: input.platform,
         },
         db,
       );
@@ -141,16 +163,17 @@ export async function executeDjinniDiscoveryRun(input: {
   }
 
   const counters = await recalculateSearchRunCounters(db, input.runId);
-  const diagnosticCounters = {
-    ...counters,
-    sourceFeedsRequested: batch.diagnostics.feedsRequested,
-    sourceItemsRetrieved: batch.diagnostics.sourceItemsRetrieved,
-    sourceItemsParsed: batch.diagnostics.sourceItemsParsed,
-    sourceItemsMalformed: batch.diagnostics.sourceItemsMalformed,
-    rejectedOutsideRunWindow: batch.diagnostics.rejectedOutsideRunWindow,
-    rejectedDuplicateInBatch: batch.diagnostics.rejectedDuplicateInBatch,
-    recordsSelected: batch.diagnostics.recordsSelected,
-  };
+  const [storedRun] = await db
+    .select({ counters: searchRuns.counters })
+    .from(searchRuns)
+    .where(eq(searchRuns.id, input.runId))
+    .limit(1);
+  const diagnosticCounters = mergePlatformDiagnostics(
+    storedRun?.counters ?? counters,
+    counters,
+    input.platform,
+    batch,
+  );
   await db
     .update(searchRuns)
     .set({ counters: diagnosticCounters, updatedAt: new Date() })
@@ -162,7 +185,7 @@ export async function executeDjinniDiscoveryRun(input: {
       and(
         eq(platformIntegrations.tenantId, context.tenantId),
         eq(platformIntegrations.ownerId, context.ownerId),
-        eq(platformIntegrations.platform, "djinni"),
+        eq(platformIntegrations.platform, input.platform),
         eq(platformIntegrations.status, "connected"),
       ),
     );
@@ -201,7 +224,7 @@ export async function recalculateSearchRunCounters(
   return counters;
 }
 
-async function loadDiscoveryContext(db: AppDatabase, runId: string) {
+async function loadDiscoveryContext(db: AppDatabase, runId: string, platform: PlatformKey) {
   const [run] = await db
     .select({
       tenantId: searchRuns.tenantId,
@@ -217,13 +240,13 @@ async function loadDiscoveryContext(db: AppDatabase, runId: string) {
       schedulePlatforms,
       and(
         eq(schedulePlatforms.scheduleId, searchSchedules.id),
-        eq(schedulePlatforms.platform, "djinni"),
+        eq(schedulePlatforms.platform, platform),
         eq(schedulePlatforms.enabled, true),
       ),
     )
     .where(eq(searchRuns.id, runId))
     .limit(1);
-  if (!run) throw new Error("djinni_discovery_context_not_found");
+  if (!run) throw new Error(`${platform}_discovery_context_not_found`);
 
   const [profiles, activeDocument] = await Promise.all([
     db
@@ -261,6 +284,38 @@ async function loadDiscoveryContext(db: AppDatabase, runId: string) {
       cvText: activeDocument?.parsedText ?? null,
     },
   };
+}
+
+function mergePlatformDiagnostics(
+  existing: Record<string, number>,
+  counters: SearchRunCounters,
+  platform: DiscoveryPlatform,
+  batch: DiscoveryBatch,
+) {
+  const prefix = platform === "djinni" ? "djinni" : "dou";
+  const names = {
+    sourceFeedsRequested: batch.diagnostics.feedsRequested,
+    sourceItemsRetrieved: batch.diagnostics.sourceItemsRetrieved,
+    sourceItemsParsed: batch.diagnostics.sourceItemsParsed,
+    sourceItemsMalformed: batch.diagnostics.sourceItemsMalformed,
+    rejectedOutsideRunWindow: batch.diagnostics.rejectedOutsideRunWindow,
+    rejectedDuplicateInBatch: batch.diagnostics.rejectedDuplicateInBatch,
+    rejectedCountryNotSelected: batch.diagnostics.rejectedCountryNotSelected ?? 0,
+    rejectedUnsupportedCountry: batch.diagnostics.rejectedUnsupportedCountry ?? 0,
+    recordsSelected: batch.diagnostics.recordsSelected,
+  };
+  const next: Record<string, number> = { ...existing, ...counters };
+  for (const [name, value] of Object.entries(names)) {
+    next[`${prefix}${name[0]!.toUpperCase()}${name.slice(1)}`] = value;
+  }
+  for (const name of Object.keys(names)) {
+    next[name] = ["djinni", "dou"].reduce(
+      (total, currentPrefix) =>
+        total + (next[`${currentPrefix}${name[0]!.toUpperCase()}${name.slice(1)}`] ?? 0),
+      0,
+    );
+  }
+  return next;
 }
 
 async function persistSourceFailures(

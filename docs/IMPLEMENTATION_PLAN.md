@@ -168,12 +168,12 @@ Acceptance criteria: no application is submitted without a per-job approval or a
 
 ### Phase 4 — additional platforms and operations
 
-- Add Just Join IT, No Fluff Jobs, DOU, Djinni, and LinkedIn only at supported capability levels.
-- Rate limiting, backoff, connector health, and per-source circuit breakers.
-- Email/in-app summaries and actionable failure alerts.
-- Admin support tools with impersonation prohibited and audited support grants.
+- [x] Add Just Join IT, No Fluff Jobs, DOU, Djinni, and LinkedIn only at supported capability levels. DOU and Djinni are discover-only through first-party RSS; the other catalog entries remain disabled pending a documented permitted integration.
+- [x] Rate limiting, backoff, connector health, and per-source circuit breakers.
+- [x] Email/in-app summaries and actionable failure alerts. Email delivery is opt-in and activates only when the Resend deployment secrets are configured.
+- [x] Admin support tools with impersonation prohibited and audited support grants.
 
-Acceptance criteria: connector failure is isolated, reported, and resumable without corrupting other platform work.
+Acceptance criteria: connector failure is isolated, reported, and resumable without corrupting other platform work. Covered locally by DOU parsing/persistence, repeated-run deduplication, connector circuit recovery, notification idempotency, email outbox, and tenant-scoped support diagnostics tests; deployed verification remains a release gate after migration `0007` is applied.
 
 ### Phase 5 — enterprise readiness
 

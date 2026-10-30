@@ -3,6 +3,7 @@ import { implementedDiscoveryPlatforms, platformCatalog } from "../domain/platfo
 import { getDb } from "./client";
 import {
   auditEvents,
+  connectorRuntimeStates,
   platformIntegrations,
   schedulePlatforms,
   searchSchedules,
@@ -10,18 +11,24 @@ import {
 } from "./schema";
 
 export async function listPlatformIntegrations(input: { tenantId: string; ownerId: string }) {
-  const connected = await getDb()
-    .select()
-    .from(platformIntegrations)
-    .where(
-      and(
-        eq(platformIntegrations.tenantId, input.tenantId),
-        eq(platformIntegrations.ownerId, input.ownerId),
+  const db = getDb();
+  const [connected, healthStates] = await Promise.all([
+    db
+      .select()
+      .from(platformIntegrations)
+      .where(
+        and(
+          eq(platformIntegrations.tenantId, input.tenantId),
+          eq(platformIntegrations.ownerId, input.ownerId),
+        ),
       ),
-    );
+    db.select().from(connectorRuntimeStates),
+  ]);
   const byPlatform = new Map(connected.map((integration) => [integration.platform, integration]));
+  const healthByPlatform = new Map(healthStates.map((state) => [state.platform, state]));
   return platformCatalog.map((catalog) => {
     const integration = byPlatform.get(catalog.key);
+    const health = healthByPlatform.get(catalog.key);
     return {
       ...catalog,
       status: integration?.status ?? ("disconnected" as const),
@@ -32,6 +39,9 @@ export async function listPlatformIntegrations(input: { tenantId: string; ownerI
         track: false,
       },
       lastVerifiedAt: integration?.lastVerifiedAt ?? null,
+      connectorHealth: health?.health ?? ("healthy" as const),
+      circuitOpenUntil: health?.circuitOpenUntil ?? null,
+      lastFailureCode: health?.lastFailureCode ?? null,
     };
   });
 }
@@ -41,6 +51,15 @@ export async function setDjinniIntegrationConnection(input: {
   ownerId: string;
   connected: boolean;
 }) {
+  return setPublicFeedIntegrationConnection({ ...input, platform: "djinni" });
+}
+
+export async function setPublicFeedIntegrationConnection(input: {
+  tenantId: string;
+  ownerId: string;
+  platform: Extract<PlatformKey, "djinni" | "dou">;
+  connected: boolean;
+}) {
   const db = getDb();
   const now = new Date();
   const [integration] = await db
@@ -48,7 +67,7 @@ export async function setDjinniIntegrationConnection(input: {
     .values({
       tenantId: input.tenantId,
       ownerId: input.ownerId,
-      platform: "djinni",
+      platform: input.platform,
       status: input.connected ? "connected" : "disconnected",
       authMode: "public_rss",
       capabilities: {
@@ -79,7 +98,7 @@ export async function setDjinniIntegrationConnection(input: {
       },
     })
     .returning();
-  if (!integration) throw new Error("Unable to update the Djinni integration.");
+  if (!integration) throw new Error(`Unable to update the ${input.platform} integration.`);
 
   await refreshOwnedScheduleEnablement(input);
   await db.insert(auditEvents).values({
@@ -89,7 +108,7 @@ export async function setDjinniIntegrationConnection(input: {
     action: input.connected ? "integration.connected" : "integration.disconnected",
     resourceType: "platform_integration",
     resourceId: integration.id,
-    metadata: { platform: "djinni", authMode: "public_rss" },
+    metadata: { platform: input.platform, authMode: "public_rss" },
   });
   return integration;
 }

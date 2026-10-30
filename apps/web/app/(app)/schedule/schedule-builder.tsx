@@ -13,11 +13,11 @@ import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 
 const sources = [
-  ["linkedin", "LinkedIn"],
-  ["just_join_it", "Just Join IT"],
-  ["no_fluff_jobs", "No Fluff Jobs"],
-  ["dou", "DOU"],
-  ["djinni", "Djinni"],
+  ["linkedin", "LinkedIn", false],
+  ["just_join_it", "Just Join IT", false],
+  ["no_fluff_jobs", "No Fluff Jobs", false],
+  ["dou", "DOU", true],
+  ["djinni", "Djinni", true],
 ] as const;
 type Platform = (typeof sources)[number][0];
 
@@ -271,11 +271,11 @@ export function ScheduleBuilder({ initialSchedules }: { initialSchedules: Schedu
         <h2 className="font-semibold">Platforms and limits</h2>
         <p className="mt-2 text-sm text-[#748078]">Auto-apply limits are stored as policy caps; no connector may submit until its capability is verified.</p>
         <div className="mt-5 space-y-3">
-          {sources.map(([platform, label]) => {
+          {sources.map(([platform, label, available]) => {
             const config = draft.platforms[platform];
             return (
               <div className="grid gap-3 rounded-xl border p-4 sm:grid-cols-[1fr_8rem_8rem] sm:items-end" key={platform}>
-                <Choice checked={config.selected} label={label} onChange={(selected) => setPlatform(setDraft, platform, { selected })} />
+                <Choice checked={config.selected} disabled={!available && !config.selected} label={`${label}${available ? "" : " — unavailable"}`} onChange={(selected) => setPlatform(setDraft, platform, { selected })} />
                 <NumberInput disabled={!config.selected} label="Search limit" max={100} min={1} onChange={(searchLimit) => setPlatform(setDraft, platform, { searchLimit })} value={config.searchLimit} />
                 <NumberInput disabled={!config.selected} label="Auto-apply cap" max={25} min={0} onChange={(autoApplyLimit) => setPlatform(setDraft, platform, { autoApplyLimit })} value={config.autoApplyLimit} />
               </div>
@@ -311,7 +311,7 @@ function emptyDraft(): Draft {
     dayOfWeek: 1,
     countries: ["PL", "UA"],
     desiredEnabled: true,
-    platforms: Object.fromEntries(sources.map(([id]) => [id, { selected: id !== "linkedin", searchLimit: 25, autoApplyLimit: 0 }])) as Draft["platforms"],
+    platforms: Object.fromEntries(sources.map(([id, _label, available]) => [id, { selected: available, searchLimit: 25, autoApplyLimit: 0 }])) as Draft["platforms"],
   };
 }
 
@@ -344,8 +344,8 @@ function NumberInput({ disabled, label, max, min, onChange, value }: { disabled:
   return <label className="text-xs font-medium text-[#5f7067]">{label}<input className="mt-1.5 w-full rounded-lg border bg-white px-3 py-2 text-sm disabled:bg-[#f3f5f2]" disabled={disabled} max={max} min={min} onChange={(event) => onChange(Number(event.target.value))} type="number" value={value} /></label>;
 }
 
-function Choice({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
-  return <label className="flex cursor-pointer items-center gap-2 text-sm"><input checked={checked} onChange={(event) => onChange(event.target.checked)} type="checkbox" /><span className="font-medium">{label}</span></label>;
+function Choice({ checked, disabled = false, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (checked: boolean) => void }) {
+  return <label className={`flex items-center gap-2 text-sm ${disabled ? "cursor-not-allowed text-[#8a928d]" : "cursor-pointer"}`}><input checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} type="checkbox" /><span className="font-medium">{label}</span></label>;
 }
 
 function ActionButton({ disabled, icon: Icon, label, onClick }: { disabled: boolean; icon: typeof PlayIcon; label: string; onClick: () => void }) {

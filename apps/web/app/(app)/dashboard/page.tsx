@@ -21,7 +21,7 @@ function formatDate(value: Date, timezone: string) {
 }
 
 const runLabels: Record<string, string> = {
-  partially_completed: "Waiting for integration",
+  partially_completed: "Partially completed",
   leased: "Preparing",
   queued: "Queued",
   running: "Running",
@@ -144,6 +144,9 @@ export default async function DashboardPage() {
                     <p className="mt-2 text-xs text-[#78857e]">
                       {run.counters.rejectedOutsideRunWindow} source items were outside this run window.
                     </p>
+                  ) : null}
+                  {run.failureCode ? (
+                    <p className="mt-2 text-xs text-amber-700">Operational note: {run.failureCode.replaceAll("_", " ")}</p>
                   ) : null}
                 </div>
                 <span className="w-fit rounded-full bg-[#edf2ec] px-3 py-1 text-xs font-semibold text-[#4b6054]">{runLabels[run.status] ?? run.status}</span>

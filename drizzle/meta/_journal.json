@@ -50,6 +50,13 @@
       "when": 1792943810508,
       "tag": "0006_dear_sway",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793377380547,
+      "tag": "0007_flowery_genesis",
+      "breakpoints": true
     }
   ]
 }

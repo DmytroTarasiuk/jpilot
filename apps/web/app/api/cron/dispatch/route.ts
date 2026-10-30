@@ -1,5 +1,6 @@
 import { isAuthorizedCronRequest } from "@jobpilot/auth/cron";
 import { claimDueSchedules, prepareClaimedSearchRun, recordWorkflowDispatch } from "@jobpilot/db/dispatcher";
+import { dispatchPendingEmailNotifications } from "@jobpilot/db/notifications";
 import { searchRunWorkflow } from "@jobpilot-workflows/search-run";
 import { start } from "workflow/api";
 
@@ -23,7 +24,8 @@ async function dispatchDueSchedules(request: Request) {
     await recordWorkflowDispatch({ runId: prepared.runId, workflowRunId: workflow.runId });
     started.push({ runId: prepared.runId, workflowRunId: workflow.runId });
   }
-  return Response.json({ claimed: claimed.length, started });
+  const email = await dispatchPendingEmailNotifications({ limit: 25 });
+  return Response.json({ claimed: claimed.length, started, email });
 }
 
 export const GET = dispatchDueSchedules;

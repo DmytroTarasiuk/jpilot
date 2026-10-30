@@ -6,7 +6,7 @@ This repository is the new production-oriented implementation. The earlier Sites
 
 ## Current state
 
-The secure foundation, Phase 1 control plane, Phase 2 discovery path, and the approval/manual portions of Phase 3 are implemented locally:
+The secure foundation and Phases 1–4 are implemented locally, except for live direct submission and job boards without a documented permitted integration:
 
 - Next.js 16 dashboard and onboarding shell;
 - Clerk sign-in/sign-up, protected routes, and per-user/per-organization tenant mapping;
@@ -15,7 +15,7 @@ The secure foundation, Phase 1 control plane, Phase 2 discovery path, and the ap
 - persisted candidate preferences plus daily and weekly schedule CRUD with IANA timezone previews and DST-safe search windows;
 - capability-aware integration catalog, manual run queueing, and run history;
 - Vercel Cron dispatcher and durable Workflow search pipeline;
-- opt-in Djinni discovery through its first-party public RSS feed;
+- opt-in Djinni and DOU discovery through first-party public RSS feeds;
 - canonical vacancy normalization, run-scoped source snapshots, global deduplication, tenant proposal suppression, and deterministic explainable scoring;
 - per-run found, new, duplicate, eligible, proposed, and failed counters;
 - tenant-scoped application inbox with per-job and bulk approve/reject controls;
@@ -24,9 +24,12 @@ The secure foundation, Phase 1 control plane, Phase 2 discovery path, and the ap
 - an approval-gated direct-submission contract, durable Workflow boundary, attempt ledger, and receipt persistence with retry idempotency;
 - application/approval state machine with idempotency and audit-oriented records;
 - tenant-bound Eve assistant sessions;
+- shared per-source rate limits, bounded retries, connector health/circuit breakers, and failure isolation;
+- tenant-scoped in-app run summaries and connector alerts, plus an idempotent opt-in Resend email outbox;
+- temporary audited read-only support diagnostics grants with no user impersonation;
 - focused unit tests and production builds.
 
-Djinni is the only implemented discovery connector. JobPilot prepares a grounded draft and manual deep link, but does not automate Djinni's authenticated UI or application form. No live direct-submit adapter is registered: the safety and idempotency infrastructure is ready, while provider enablement remains blocked on a documented applicant-side API or permitted partnership. Other job boards remain planned and saved schedules activate only when they include an explicitly connected, implemented discovery source. See [the implementation plan](docs/IMPLEMENTATION_PLAN.md) for the phased delivery sequence and [the deployment guide](docs/DEPLOYMENT.md) for the environment gate.
+Djinni and DOU are the implemented discover-only connectors. JobPilot prepares a grounded draft and manual deep link, but does not automate authenticated job-board UIs or application forms. No live direct-submit adapter is registered: the safety and idempotency infrastructure is ready, while provider enablement remains blocked on a documented applicant-side API or permitted partnership. LinkedIn, Just Join IT, and No Fluff Jobs remain disabled rather than relying on private endpoints or browser automation. See [the implementation plan](docs/IMPLEMENTATION_PLAN.md) for the phased delivery sequence and [the deployment guide](docs/DEPLOYMENT.md) for the environment gate.
 
 ## Stack
 
@@ -75,3 +78,5 @@ JobPilot uses official APIs or explicitly permitted integration paths. It does n
 
 - [Runtime and scheduling](docs/adr/0001-runtime-and-scheduling.md)
 - [Application automation safety](docs/adr/0002-application-safety.md)
+- [Djinni first-party RSS discovery](docs/adr/0003-djinni-rss-discovery.md)
+- [Phase 4 connectors and operations](docs/adr/0004-phase-4-connectors-and-operations.md)

@@ -2,12 +2,14 @@ import { UserButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import {
   BotIcon,
+  BellIcon,
   BriefcaseBusinessIcon,
   CalendarClockIcon,
   FileTextIcon,
   LayoutDashboardIcon,
   Link2Icon,
   RadarIcon,
+  ShieldCheckIcon,
   UserRoundIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -21,6 +23,8 @@ const navigation = [
   ["Search schedule", "/schedule", CalendarClockIcon],
   ["CV", "/cv", FileTextIcon],
   ["Integrations", "/integrations", Link2Icon],
+  ["Notifications", "/notifications", BellIcon],
+  ["Support access", "/support", ShieldCheckIcon],
   ["Assistant", "/agent", BotIcon],
 ] as const;
 

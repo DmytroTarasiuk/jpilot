@@ -25,6 +25,15 @@ const cvMalwareScanSchema = z.object({
   CV_MALWARE_SCAN_ENABLED: z.enum(["true", "false"]).default("false"),
 });
 
+const emailDeliverySchema = z.object({
+  RESEND_API_KEY: z.string().min(1),
+  NOTIFICATION_EMAIL_FROM: z.string().min(3),
+});
+
+const supportAccessSchema = z.object({
+  SUPPORT_ACCESS_SECRET: z.string().min(32),
+});
+
 function parseEnvironment<T extends z.ZodType>(schema: T, label: string): z.output<T> {
   const result = schema.safeParse(process.env);
   if (!result.success) {
@@ -59,4 +68,14 @@ export function getCloudmersiveEnvironment() {
 
 export function isCloudmersiveMalwareScanEnabled() {
   return parseEnvironment(cvMalwareScanSchema, "CV malware scan").CV_MALWARE_SCAN_ENABLED === "true";
+}
+
+export function getEmailDeliveryEnvironment() {
+  const result = emailDeliverySchema.safeParse(process.env);
+  return result.success ? result.data : null;
+}
+
+export function getSupportAccessEnvironment() {
+  const result = supportAccessSchema.safeParse(process.env);
+  return result.success ? result.data : null;
 }

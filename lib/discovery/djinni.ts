@@ -1,5 +1,13 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { canonicalizeJobUrl, sha256, type SourceVacancy, type TargetCountryCode } from "../domain/job";
+import type {
+  DiscoveryBatch,
+  DiscoveryDiagnostics,
+  DiscoveryFailure,
+  DiscoveryInput,
+} from "./types";
+
+export type { DiscoveryBatch, DiscoveryDiagnostics, DiscoveryFailure } from "./types";
 
 const DJINNI_RSS_URL = "https://djinni.co/jobs/rss/";
 const MAX_FEED_BYTES = 2 * 1024 * 1024;
@@ -9,31 +17,6 @@ const djinniCountry = {
   PL: "POL",
   UA: "UKR",
 } as const satisfies Record<TargetCountryCode, string>;
-
-export interface DiscoveryFailure {
-  externalId: string;
-  sourceUrl: string;
-  sourcePayload: Record<string, unknown>;
-  failureCode: string;
-  contentHash: string;
-}
-
-export interface DiscoveryBatch {
-  platform: "djinni";
-  records: SourceVacancy[];
-  failures: DiscoveryFailure[];
-  diagnostics: DiscoveryDiagnostics;
-}
-
-export interface DiscoveryDiagnostics {
-  feedsRequested: number;
-  sourceItemsRetrieved: number;
-  sourceItemsParsed: number;
-  sourceItemsMalformed: number;
-  rejectedOutsideRunWindow: number;
-  rejectedDuplicateInBatch: number;
-  recordsSelected: number;
-}
 
 export class DjinniDiscoveryError extends Error {
   constructor(
@@ -47,12 +30,7 @@ export class DjinniDiscoveryError extends Error {
 }
 
 export async function discoverDjinniVacancies(
-  input: {
-    targetCountries: TargetCountryCode[];
-    windowStart: Date;
-    windowEnd: Date;
-    limit: number;
-  },
+  input: DiscoveryInput,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DiscoveryBatch> {
   const countryResults = await Promise.all(

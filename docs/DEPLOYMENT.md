@@ -24,6 +24,8 @@ Do not run the development server or a database migration until the environment 
 
 Create every key listed in `.env.example` in the appropriate Vercel environment. `CRON_SECRET` must be a cryptographically random value of at least 16 characters; longer is preferred. Vercel and the external dispatcher send it to the endpoint as a bearer token.
 
+In-app notifications require no provider. Optional email delivery uses Resend's HTTPS API: set `RESEND_API_KEY` to a sending-only key and `NOTIFICATION_EMAIL_FROM` to a verified sender. If either is absent, messages remain in-app and no outbound email request is made. Optional read-only support diagnostics require a separate high-entropy `SUPPORT_ACCESS_SECRET`; keep the diagnostics endpoint disabled by omitting this secret until the support process is approved.
+
 Use separate credentials for development, preview, and production. Do not expose `CLERK_SECRET_KEY`, `DATABASE_URL`, or R2 credentials through any `NEXT_PUBLIC_` variable.
 
 Malware scanning is opt-in during prelaunch. Set `CV_MALWARE_SCAN_ENABLED=false` (the default) to keep CV bytes inside JobPilot. In this mode, the application still validates PDF/DOCX file signatures, enforces upload and archive-expansion bounds, validates the DOCX package structure, limits PDF pages and image sizes, and bounds extracted text. These checks reject malformed or resource-abusive files, but they are not an antivirus verdict; the document is recorded as `scan_status=skipped`.
@@ -74,6 +76,8 @@ The current upload contract signs one object key, content type, and content leng
 
 Migration `0006_dear_sway.sql` introduces Phase 3 drafts and submission-attempt records. It also materializes existing Phase 2 proposals into pending, manual approval tasks so historical proposals remain reviewable instead of being silently dropped. Validate the backfilled counts on the development branch before promotion.
 
+Migration `0007_flowery_genesis.sql` adds shared connector health/circuit state, tenant notifications and email-delivery outbox records, notification preferences, and temporary support grants. Apply it before connecting DOU or deploying the Phase 4 UI and worker changes.
+
 ## 6. Preview verification
 
 Verify these flows with two unrelated Clerk users and, if organizations are enabled, two organizations:
@@ -91,6 +95,10 @@ Verify these flows with two unrelated Clerk users and, if organizations are enab
 - approve, reject, bulk review, manual deep link, draft edit, and user-confirmed status correction;
 - repeated direct-submit workflow execution reuses one provider idempotency key and one durable receipt when a reviewed adapter is available;
 - schedules remain paused when no discovery integration is connected.
+- a DOU-only run persists canonical vacancies and a repeated run creates no duplicate proposal;
+- one connector failure does not stop another connector, opens its circuit after the bounded threshold, and emits one actionable alert;
+- run-summary replay creates one notification and at most one provider email through the stable idempotency key;
+- support diagnostics reject missing, expired, revoked, wrong-tenant, or wrong-principal grants and append an audit event for every successful read.
 
 ## 7. Production release gate
 
@@ -106,3 +114,4 @@ Before promotion, enable Cloudmersive (or another reviewed malware-scanning prov
 - [Clerk Next.js authentication](https://clerk.com/docs/reference/nextjs/app-router/auth)
 - [Cloudflare R2 presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
 - [Cloudflare R2 browser CORS](https://developers.cloudflare.com/r2/buckets/cors/)
+- [Resend email API](https://resend.com/docs/api-reference/emails/send-email)

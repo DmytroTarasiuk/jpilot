@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { PlatformKey } from "../db/schema";
 
 export const MATCH_PROPOSAL_THRESHOLD = 55;
 
@@ -6,11 +7,13 @@ export type TargetCountryCode = "PL" | "UA";
 export type WorkMode = "remote" | "hybrid" | "onsite" | "unknown";
 
 export interface SourceVacancy {
-  platform: "djinni";
+  platform: PlatformKey;
   externalId: string;
   sourceUrl: string;
   countryCode: TargetCountryCode;
   title: string;
+  company?: string;
+  city?: string | null;
   descriptionHtml: string;
   publishedAt: string | null;
   categories: string[];
@@ -18,7 +21,7 @@ export interface SourceVacancy {
 }
 
 export interface NormalizedVacancy {
-  platform: "djinni";
+  platform: PlatformKey;
   externalId: string;
   canonicalUrl: string;
   title: string;
@@ -121,7 +124,7 @@ export function normalizeVacancy(source: SourceVacancy): NormalizedVacancy {
   if (!title) throw new Error("title_missing");
   if (!descriptionText) throw new Error("description_missing");
 
-  const company = inferCompany(title);
+  const company = collapseWhitespace(source.company ?? "") || inferCompany(title);
   const workMode = inferWorkMode(`${title}\n${descriptionText}`);
   const normalized = {
     platform: source.platform,
@@ -130,7 +133,7 @@ export function normalizeVacancy(source: SourceVacancy): NormalizedVacancy {
     title,
     company,
     countryCode: source.countryCode,
-    city: null,
+    city: source.city ? collapseWhitespace(source.city) : null,
     workMode,
     descriptionText,
     categories: [...new Set(source.categories.map(collapseWhitespace).filter(Boolean))].sort(),
@@ -246,7 +249,7 @@ export function scoreVacancy(input: {
   }
 
   if (profile.salaryMin !== null) {
-    concerns.push("Djinni's RSS feed does not expose structured salary data, so the salary minimum was not enforced.");
+    concerns.push(`${platformName(vacancy.platform)} does not expose structured salary data in its discovery feed, so the salary minimum was not enforced.`);
   }
 
   score = Math.max(0, Math.min(100, Math.round(score)));
@@ -364,4 +367,12 @@ function tokenize(value: string) {
 
 function countryName(value: TargetCountryCode) {
   return value === "PL" ? "Poland" : "Ukraine";
+}
+
+function platformName(value: PlatformKey) {
+  if (value === "dou") return "DOU";
+  if (value === "djinni") return "Djinni";
+  if (value === "just_join_it") return "Just Join IT";
+  if (value === "no_fluff_jobs") return "No Fluff Jobs";
+  return "LinkedIn";
 }

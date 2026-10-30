@@ -74,13 +74,48 @@ export async function completeSearchRunExecution(input: {
   runId: string;
   workflowRunId: string;
   runnablePlatformCount: number;
+  succeededPlatformCount: number;
+  failedPlatformCount: number;
 }) {
-  return finalizeRun({
+  const outcome = deriveRunOutcome(input);
+  await finalizeRun({
     runId: input.runId,
     workflowRunId: input.workflowRunId,
-    status: input.runnablePlatformCount === 0 ? "partially_completed" : "completed",
-    failureCode: input.runnablePlatformCount === 0 ? "no_connected_discovery_integrations" : null,
+    status: outcome.status,
+    failureCode: outcome.failureCode,
+    scheduleDisposition: outcome.scheduleDisposition,
   });
+  return outcome.workflowStatus;
+}
+
+export function deriveRunOutcome(input: {
+  runnablePlatformCount: number;
+  succeededPlatformCount: number;
+  failedPlatformCount: number;
+}) {
+  if (input.runnablePlatformCount === 0) {
+    return {
+      status: "partially_completed" as const,
+      workflowStatus: "waiting_for_integration" as const,
+      failureCode: "no_connected_discovery_integrations",
+      scheduleDisposition: "pause" as const,
+    };
+  }
+  if (input.failedPlatformCount === 0) {
+    return {
+      status: "completed" as const,
+      workflowStatus: "completed" as const,
+      failureCode: null,
+      scheduleDisposition: "advance" as const,
+    };
+  }
+  const status = input.succeededPlatformCount > 0 ? "partially_completed" as const : "failed" as const;
+  return {
+    status,
+    workflowStatus: status,
+    failureCode: "connector_failure",
+    scheduleDisposition: "advance" as const,
+  };
 }
 
 export async function failSearchRunExecution(input: {
@@ -88,7 +123,7 @@ export async function failSearchRunExecution(input: {
   workflowRunId: string;
   failureCode: string;
 }) {
-  return finalizeRun({ ...input, status: "failed" });
+  return finalizeRun({ ...input, status: "failed", scheduleDisposition: "pause" });
 }
 
 async function finalizeRun(input: {
@@ -96,6 +131,7 @@ async function finalizeRun(input: {
   workflowRunId: string;
   status: "completed" | "partially_completed" | "failed";
   failureCode: string | null;
+  scheduleDisposition: "advance" | "pause";
 }) {
   const db = getDb();
   const [run] = await db
@@ -121,7 +157,10 @@ async function finalizeRun(input: {
     })
     .where(and(eq(searchRuns.id, input.runId), eq(searchRuns.workflowRunId, input.workflowRunId)));
 
-  if (!run.scheduleId || !run.scheduleLeaseToken) return true;
+  if (!run.scheduleId || !run.scheduleLeaseToken) {
+    await createSummaryNotification(input.runId);
+    return true;
+  }
   const [schedule] = await db
     .select()
     .from(searchSchedules)
@@ -132,9 +171,12 @@ async function finalizeRun(input: {
       ),
     )
     .limit(1);
-  if (!schedule) return true;
+  if (!schedule) {
+    await createSummaryNotification(input.runId);
+    return true;
+  }
 
-  if (input.status !== "completed") {
+  if (input.scheduleDisposition === "pause") {
     await db
       .update(searchSchedules)
       .set({ enabled: false, leaseToken: null, leaseExpiresAt: null, updatedAt: new Date() })
@@ -144,6 +186,7 @@ async function finalizeRun(input: {
           eq(searchSchedules.leaseToken, run.scheduleLeaseToken),
         ),
       );
+    await createSummaryNotification(input.runId);
     return true;
   }
 
@@ -169,5 +212,15 @@ async function finalizeRun(input: {
         eq(searchSchedules.leaseToken, run.scheduleLeaseToken),
       ),
     );
+  await createSummaryNotification(input.runId);
   return true;
+}
+
+async function createSummaryNotification(runId: string) {
+  try {
+    const { createRunSummaryNotification } = await import("./notifications");
+    await createRunSummaryNotification({ runId });
+  } catch (error) {
+    console.error("run summary notification could not be created", { runId, error });
+  }
 }

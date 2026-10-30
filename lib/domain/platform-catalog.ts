@@ -24,7 +24,7 @@ export const platformCatalog: readonly PlatformCatalogEntry[] = [
   {
     key: "just_join_it",
     name: "Just Join IT",
-    description: "Discovery integration is the leading Phase 2 candidate; submission access is unverified.",
+    description: "No documented public discovery or applicant submission integration is verified, so this connector remains disabled.",
     availability: "planned",
     supportedCapabilities: { discover: false, prepare: true, submit: false, track: false },
   },
@@ -38,9 +38,9 @@ export const platformCatalog: readonly PlatformCatalogEntry[] = [
   {
     key: "dou",
     name: "DOU",
-    description: "Discovery is planned. External application pages become manual tasks.",
-    availability: "planned",
-    supportedCapabilities: { discover: false, prepare: true, submit: false, track: false },
+    description: "Discovery uses DOU's first-party public vacancy RSS feed. Applications remain reviewed manual tasks.",
+    availability: "available",
+    supportedCapabilities: { discover: true, prepare: true, submit: false, track: true },
   },
   {
     key: "djinni",
@@ -53,4 +53,4 @@ export const platformCatalog: readonly PlatformCatalogEntry[] = [
 
 // A platform is runnable only after a permitted production adapter ships.
 // This deliberately stays separate from user-controlled integration records.
-export const implementedDiscoveryPlatforms = new Set<PlatformKey>(["djinni"]);
+export const implementedDiscoveryPlatforms = new Set<PlatformKey>(["djinni", "dou"]);
