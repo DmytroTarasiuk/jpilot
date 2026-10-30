@@ -121,6 +121,14 @@ export const notificationDeliveryStatusEnum = pgEnum("notification_delivery_stat
   "failed",
   "skipped",
 ]);
+export const privacyRequestTypeEnum = pgEnum("privacy_request_type", ["export", "erasure"]);
+export const privacyRequestStatusEnum = pgEnum("privacy_request_status", [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+  "cancelled",
+]);
 
 export type PlatformKey = (typeof platformEnum.enumValues)[number];
 export type ApplicationStatus = (typeof applicationStatusEnum.enumValues)[number];
@@ -840,4 +848,97 @@ export const auditEvents = pgTable(
     createdAt,
   },
   (table) => [index("audit_events_tenant_created_idx").on(table.tenantId, table.createdAt)],
+);
+
+// Privacy history deliberately survives deletion of an application user. The
+// subject hash supports abuse prevention and audit correlation without keeping
+// a Clerk identifier or email address after erasure.
+export const privacyConsents = pgTable(
+  "privacy_consents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+    subjectHash: varchar("subject_hash", { length: 64 }).notNull(),
+    consentType: varchar("consent_type", { length: 64 }).notNull(),
+    policyVersion: varchar("policy_version", { length: 32 }).notNull(),
+    granted: boolean("granted").notNull(),
+    source: varchar("source", { length: 32 }).default("settings").notNull(),
+    requestId: text("request_id").notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex("privacy_consents_request_unique").on(table.requestId),
+    index("privacy_consents_subject_created_idx").on(table.subjectHash, table.createdAt),
+  ],
+);
+
+export const privacyRequests = pgTable(
+  "privacy_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+    subjectHash: varchar("subject_hash", { length: 64 }).notNull(),
+    type: privacyRequestTypeEnum("type").notNull(),
+    status: privacyRequestStatusEnum("status").default("pending").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    confirmationTokenHash: varchar("confirmation_token_hash", { length: 64 }),
+    confirmationExpiresAt: timestamp("confirmation_expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }),
+    failureCode: varchar("failure_code", { length: 128 }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("privacy_requests_idempotency_unique").on(table.idempotencyKey),
+    index("privacy_requests_subject_created_idx").on(table.subjectHash, table.createdAt),
+  ],
+);
+
+export const tenantGovernancePolicies = pgTable(
+  "tenant_governance_policies",
+  {
+    tenantId: uuid("tenant_id")
+      .primaryKey()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    sourceSnapshotRetentionDays: integer("source_snapshot_retention_days").default(90).notNull(),
+    notificationRetentionDays: integer("notification_retention_days").default(180).notNull(),
+    auditRetentionDays: integer("audit_retention_days").default(365).notNull(),
+    monthlySearchRunLimit: integer("monthly_search_run_limit").default(1_000).notNull(),
+    monthlyEmailLimit: integer("monthly_email_limit").default(1_000).notNull(),
+    budgetWarningPercent: integer("budget_warning_percent").default(80).notNull(),
+    hardStopSearchRuns: boolean("hard_stop_search_runs").default(true).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    check(
+      "tenant_governance_snapshot_retention",
+      sql`${table.sourceSnapshotRetentionDays} BETWEEN 30 AND 365`,
+    ),
+    check(
+      "tenant_governance_notification_retention",
+      sql`${table.notificationRetentionDays} BETWEEN 30 AND 730`,
+    ),
+    check(
+      "tenant_governance_audit_retention",
+      sql`${table.auditRetentionDays} BETWEEN 365 AND 2555`,
+    ),
+    check(
+      "tenant_governance_search_budget",
+      sql`${table.monthlySearchRunLimit} BETWEEN 1 AND 1000000`,
+    ),
+    check(
+      "tenant_governance_email_budget",
+      sql`${table.monthlyEmailLimit} BETWEEN 0 AND 1000000`,
+    ),
+    check(
+      "tenant_governance_warning_percent",
+      sql`${table.budgetWarningPercent} BETWEEN 50 AND 100`,
+    ),
+  ],
 );

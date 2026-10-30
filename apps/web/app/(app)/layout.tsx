@@ -9,7 +9,9 @@ import {
   LayoutDashboardIcon,
   Link2Icon,
   RadarIcon,
+  Settings2Icon,
   ShieldCheckIcon,
+  ShieldIcon,
   UserRoundIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -24,6 +26,8 @@ const navigation = [
   ["CV", "/cv", FileTextIcon],
   ["Integrations", "/integrations", Link2Icon],
   ["Notifications", "/notifications", BellIcon],
+  ["Operations", "/operations", Settings2Icon],
+  ["Privacy", "/privacy", ShieldIcon],
   ["Support access", "/support", ShieldCheckIcon],
   ["Assistant", "/agent", BotIcon],
 ] as const;

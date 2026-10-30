@@ -57,6 +57,13 @@
       "when": 1793377380547,
       "tag": "0007_flowery_genesis",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793396808985,
+      "tag": "0008_sweet_cassandra_nova",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { scheduledSearchWindow } from "../domain/search-window";
-import { getDb } from "./client";
-import { searchRuns } from "./schema";
+import { nextScheduleOccurrence } from "../domain/schedule";
+import { getDb, type AppDatabase } from "./client";
+import { assertSearchRunBudget, SearchRunBudgetExceededError } from "./governance";
+import { searchRuns, searchSchedules } from "./schema";
 
 export interface ClaimedSchedule {
   id: string;
@@ -69,8 +71,10 @@ export async function claimDueSchedules(input: { now: Date; limit: number }) {
   });
 }
 
-export async function prepareClaimedSearchRun(schedule: ClaimedSchedule): Promise<PreparedRun> {
-  const db = getDb();
+export async function prepareClaimedSearchRun(
+  schedule: ClaimedSchedule,
+  db: AppDatabase = getDb(),
+): Promise<PreparedRun> {
   const window = scheduledSearchWindow({
     scheduledAt: schedule.scheduledFor,
     timezone: schedule.timezone,
@@ -78,6 +82,62 @@ export async function prepareClaimedSearchRun(schedule: ClaimedSchedule): Promis
   });
   const idempotencyKey = `schedule:${schedule.id}:${schedule.scheduledFor.toISOString()}`;
   const runId = randomUUID();
+
+  const [existing] = await db
+    .select({ id: searchRuns.id, status: searchRuns.status, workflowRunId: searchRuns.workflowRunId })
+    .from(searchRuns)
+    .where(eq(searchRuns.idempotencyKey, idempotencyKey))
+    .limit(1);
+  if (existing) {
+    return {
+      runId: existing.id,
+      shouldStart: existing.status === "leased" && existing.workflowRunId === null,
+    };
+  }
+
+  try {
+    await assertSearchRunBudget(schedule.tenantId, new Date(), db);
+  } catch (error) {
+    if (!(error instanceof SearchRunBudgetExceededError)) throw error;
+    await db
+      .insert(searchRuns)
+      .values({
+        id: runId,
+        tenantId: schedule.tenantId,
+        ownerId: schedule.ownerId,
+        scheduleId: schedule.id,
+        trigger: "scheduled",
+        status: "cancelled",
+        idempotencyKey,
+        scheduledFor: schedule.scheduledFor,
+        windowStart: window.start,
+        windowEnd: window.end,
+        scheduleLeaseToken: schedule.leaseToken,
+        failureCode: error.code,
+        completedAt: new Date(),
+      })
+      .onConflictDoNothing({ target: searchRuns.idempotencyKey });
+    const nextRunAt = nextScheduleOccurrence({
+      now: schedule.scheduledFor,
+      timezone: schedule.timezone,
+      localTime: schedule.localTime,
+      cadence: schedule.cadence,
+      dayOfWeek: schedule.dayOfWeek,
+    });
+    await db
+      .update(searchSchedules)
+      .set({ nextRunAt, leaseToken: null, leaseExpiresAt: null, updatedAt: new Date() })
+      .where(
+        sql`${searchSchedules.id} = ${schedule.id} AND ${searchSchedules.leaseToken} = ${schedule.leaseToken}`,
+      );
+    const [cancelled] = await db
+      .select({ id: searchRuns.id })
+      .from(searchRuns)
+      .where(eq(searchRuns.idempotencyKey, idempotencyKey))
+      .limit(1);
+    if (!cancelled) throw new Error("Unable to record the budget-cancelled search run.");
+    return { runId: cancelled.id, shouldStart: false };
+  }
 
   await db
     .insert(searchRuns)

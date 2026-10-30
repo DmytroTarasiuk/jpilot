@@ -177,12 +177,12 @@ Acceptance criteria: connector failure is isolated, reported, and resumable with
 
 ### Phase 5 — enterprise readiness
 
-- Security review, threat model, dependency and secret scanning.
-- Data export/deletion, retention controls, consent history, and privacy documentation.
-- Backup/restore drill, SLOs, alerting, cost budgets, and incident runbooks.
-- Load and tenancy-isolation tests.
+- [x] Security review, threat model, dependency and secret scanning.
+- [x] Data export/deletion, retention controls, consent history, and privacy documentation.
+- [ ] Backup/restore drill, SLOs, alerting, cost budgets, and incident runbooks. The controls, verifier, and runbooks are implemented; a real isolated Neon restore drill remains an external release gate.
+- [x] Load and tenancy-isolation tests.
 
-Acceptance criteria: production readiness checklist approved and restore exercise completed.
+Acceptance criteria: production readiness checklist approved and restore exercise completed. These external approvals remain open in `docs/PRODUCTION_READINESS.md` and must not be inferred from local tests.
 
 ## 9. Environment and deployment gates
 

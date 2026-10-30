@@ -77,6 +77,7 @@ describe("Phase 4 operational controls", () => {
       claimed: 1,
       sent: 1,
       failed: 0,
+      skipped: 0,
     });
     expect(await db.select().from(notificationDeliveries)).toEqual([
       expect.objectContaining({ status: "sent", attemptCount: 1, providerMessageId: "email_123" }),

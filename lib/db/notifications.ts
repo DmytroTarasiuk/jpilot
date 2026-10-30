@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getEmailDeliveryEnvironment } from "../env/server";
 import { getDb, type AppDatabase } from "./client";
+import { getGovernancePolicy, getMonthlyUsage } from "./governance";
 import {
   notificationDeliveries,
   notificationPreferences,
@@ -172,6 +173,7 @@ export async function dispatchPendingEmailNotifications(input: {
     title: string;
     body: string;
     actionHref: string | null;
+    tenantId: string;
   }>`
     WITH due AS (
       SELECT delivery.id
@@ -197,7 +199,8 @@ export async function dispatchPendingEmailNotifications(input: {
       delivery.destination,
       notification.title,
       notification.body,
-      notification.action_href AS "actionHref"
+      notification.action_href AS "actionHref",
+      notification.tenant_id AS "tenantId"
   `);
   const deliveries = result.rows as Array<{
     id: string;
@@ -206,10 +209,30 @@ export async function dispatchPendingEmailNotifications(input: {
     title: string;
     body: string;
     actionHref: string | null;
+    tenantId: string;
   }>;
   let sent = 0;
   let failed = 0;
+  let skipped = 0;
+  const emailBudgets = new Map<string, { limit: number; used: number }>();
   for (const delivery of deliveries) {
+    let budget = emailBudgets.get(delivery.tenantId);
+    if (!budget) {
+      const [policy, usage] = await Promise.all([
+        getGovernancePolicy(delivery.tenantId, db),
+        getMonthlyUsage(delivery.tenantId, now, db),
+      ]);
+      budget = { limit: policy.monthlyEmailLimit, used: usage.emailsSent };
+      emailBudgets.set(delivery.tenantId, budget);
+    }
+    if (budget.used >= budget.limit) {
+      await db
+        .update(notificationDeliveries)
+        .set({ status: "skipped", failureCode: "monthly_email_budget_exceeded", updatedAt: new Date() })
+        .where(eq(notificationDeliveries.id, delivery.id));
+      skipped += 1;
+      continue;
+    }
     try {
       const response = await (input.fetchImpl ?? fetch)("https://api.resend.com/emails", {
         method: "POST",
@@ -232,6 +255,7 @@ export async function dispatchPendingEmailNotifications(input: {
         .set({ status: "sent", providerMessageId: payload?.id ?? null, failureCode: null, sentAt: new Date(), updatedAt: new Date() })
         .where(eq(notificationDeliveries.id, delivery.id));
       sent += 1;
+      budget.used += 1;
     } catch (error) {
       const failureCode = error instanceof Error ? error.message : "email_delivery_failed";
       await db
@@ -246,7 +270,7 @@ export async function dispatchPendingEmailNotifications(input: {
       failed += 1;
     }
   }
-  return { configured: true, claimed: deliveries.length, sent, failed };
+  return { configured: true, claimed: deliveries.length, sent, failed, skipped };
 }
 
 async function createNotification(db: AppDatabase, input: NotificationInput) {

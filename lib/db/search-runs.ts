@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { manualSearchWindow } from "../domain/search-window";
 import { getDb } from "./client";
+import { assertSearchRunBudget } from "./governance";
 import { searchRuns, searchSchedules } from "./schema";
 
 export async function prepareManualSearchRun(input: {
@@ -27,12 +28,30 @@ export async function prepareManualSearchRun(input: {
   if (!schedule) return null;
 
   const requestedAt = input.now ?? new Date();
+  const idempotencyKey = `${input.tenantId}:${input.ownerId}:manual-run:${input.requestId}`;
+  const [existing] = await db
+    .select({
+      id: searchRuns.id,
+      status: searchRuns.status,
+      workflowRunId: searchRuns.workflowRunId,
+      windowStart: searchRuns.windowStart,
+      windowEnd: searchRuns.windowEnd,
+    })
+    .from(searchRuns)
+    .where(eq(searchRuns.idempotencyKey, idempotencyKey))
+    .limit(1);
+  if (existing) {
+    return {
+      ...existing,
+      shouldStart: existing.status === "leased" && existing.workflowRunId === null,
+    };
+  }
+  await assertSearchRunBudget(input.tenantId, requestedAt, db);
   const window = manualSearchWindow({
     requestedAt,
     timezone: schedule.timezone,
     lookbackDays: input.lookbackDays,
   });
-  const idempotencyKey = `${input.tenantId}:${input.ownerId}:manual-run:${input.requestId}`;
   const runId = randomUUID();
   await db
     .insert(searchRuns)
