@@ -8,6 +8,7 @@ import { prepareClaimedSearchRun } from "./dispatcher";
 import {
   applyRetentionPolicies,
   assertSearchRunBudget,
+  createBudgetAlerts,
   SearchRunBudgetExceededError,
   updateGovernancePolicy,
 } from "./governance";
@@ -136,5 +137,42 @@ describe("Phase 5 governance controls", () => {
     expect(result).toMatchObject({ deletedNotifications: 1, deletedAuditEvents: 1 });
     expect(await db.select().from(notifications)).toEqual([expect.objectContaining({ dedupeKey: "recent" })]);
     expect(await db.select().from(auditEvents)).toEqual([expect.objectContaining({ action: "recent" })]);
+  });
+
+  it("creates one typed, idempotent monthly budget warning", async () => {
+    const now = new Date("2026-10-30T12:00:00.000Z");
+    await updateGovernancePolicy({
+      tenantId,
+      actorId: ownerId,
+      role: "owner",
+      sourceSnapshotRetentionDays: 90,
+      notificationRetentionDays: 180,
+      auditRetentionDays: 365,
+      monthlySearchRunLimit: 1,
+      monthlyEmailLimit: 10,
+      budgetWarningPercent: 80,
+      hardStopSearchRuns: true,
+      db: productionDb,
+    });
+    await db.insert(searchRuns).values({
+      tenantId,
+      ownerId,
+      trigger: "manual",
+      status: "completed",
+      idempotencyKey: randomUUID(),
+      scheduledFor: now,
+      windowStart: new Date("2026-10-30T00:00:00.000Z"),
+      windowEnd: now,
+      createdAt: now,
+    });
+
+    await expect(createBudgetAlerts({ now, db: productionDb })).resolves.toBe(1);
+    await expect(createBudgetAlerts({ now, db: productionDb })).resolves.toBe(0);
+    expect(await db.select().from(notifications)).toEqual([
+      expect.objectContaining({
+        type: "budget_warning",
+        dedupeKey: "budget:search:2026-10",
+      }),
+    ]);
   });
 });

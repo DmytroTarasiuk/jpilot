@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import type { PlatformKey } from "../db/schema";
+import { MATCH_PROPOSAL_THRESHOLD } from "./matching";
 
-export const MATCH_PROPOSAL_THRESHOLD = 55;
+export { MATCH_PROPOSAL_THRESHOLD } from "./matching";
 
 export type TargetCountryCode = "PL" | "UA";
 export type WorkMode = "remote" | "hybrid" | "onsite" | "unknown";
@@ -96,6 +97,24 @@ const stopWords = new Set([
   "робота",
   "та",
   "що",
+]);
+
+const genericProfileKeywords = new Set([
+  "architect",
+  "developer",
+  "engineer",
+  "engineering",
+  "expert",
+  "fullstack",
+  "junior",
+  "lead",
+  "manager",
+  "middle",
+  "midlevel",
+  "principal",
+  "senior",
+  "software",
+  "specialist",
 ]);
 
 export function canonicalizeJobUrl(value: string) {
@@ -230,12 +249,7 @@ export function scoreVacancy(input: {
     else concerns.push("The job title has weak overlap with the selected target titles.");
   }
 
-  const profileText = [
-    ...profile.targetTitles,
-    profile.headline ?? "",
-    ...profile.languages,
-    (profile.cvText ?? "").slice(0, 40_000),
-  ].join(" ");
+  const profileText = (profile.cvText ?? "").slice(0, 40_000);
   const sharedKeywords = overlapKeywords(
     profileText,
     `${vacancy.title} ${vacancy.categories.join(" ")} ${vacancy.descriptionText}`,
@@ -252,6 +266,12 @@ export function scoreVacancy(input: {
     concerns.push(`${platformName(vacancy.platform)} does not expose structured salary data in its discovery feed, so the salary minimum was not enforced.`);
   }
 
+  const hasConfirmedCvEvidence = profileText.trim().length > 0;
+  const hasSkillOverlap = sharedKeywords.length > 0;
+  if (hasConfirmedCvEvidence && !hasSkillOverlap) {
+    concerns.push("No skill or technology overlap was found in the active CV.");
+  }
+
   score = Math.max(0, Math.min(100, Math.round(score)));
   const eligible = hardFilterFailures.length === 0;
   if (eligible && score < MATCH_PROPOSAL_THRESHOLD) {
@@ -259,7 +279,10 @@ export function scoreVacancy(input: {
   }
   return {
     eligible,
-    shouldPropose: eligible && score >= MATCH_PROPOSAL_THRESHOLD,
+    shouldPropose:
+      eligible &&
+      score >= MATCH_PROPOSAL_THRESHOLD &&
+      (!hasConfirmedCvEvidence || hasSkillOverlap),
     score,
     reasons: reasons.slice(0, 8),
     concerns: concerns.slice(0, 8),
@@ -352,7 +375,10 @@ function bestTitleScore(title: string, candidates: string[]) {
 function overlapKeywords(profileText: string, jobText: string) {
   const profileTokens = tokenize(profileText);
   const jobTokens = tokenize(jobText);
-  return [...profileTokens].filter((token) => jobTokens.has(token)).sort().slice(0, 20);
+  return [...profileTokens]
+    .filter((token) => jobTokens.has(token) && !genericProfileKeywords.has(token))
+    .sort()
+    .slice(0, 20);
 }
 
 function tokenize(value: string) {

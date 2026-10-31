@@ -1,0 +1,1 @@
+export const MATCH_PROPOSAL_THRESHOLD = 72;

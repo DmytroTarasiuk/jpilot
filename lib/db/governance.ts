@@ -214,6 +214,7 @@ export async function createBudgetAlerts(input: { now?: Date; db?: AppDatabase }
   const now = input.now ?? new Date();
   const { start, end } = utcMonth(now);
   const month = start.toISOString().slice(0, 7);
+  const dedupeKey = `budget:search:${month}`;
   const result = await db.execute(sql<{ created: number }>`
     WITH usage AS (
       SELECT tenant.id AS tenant_id,
@@ -234,8 +235,8 @@ export async function createBudgetAlerts(input: { now?: Date; db?: AppDatabase }
       SELECT tenant_id, owner_id, 'budget_warning', 'warning'::notification_severity,
         'Monthly search budget is nearly used',
         run_count || ' of ' || run_limit || ' search runs have been used this month.',
-        '/operations', 'budget:search:${month}',
-        jsonb_build_object('used', run_count, 'limit', run_limit, 'month', ${month})
+        '/operations', ${dedupeKey}::text,
+        jsonb_build_object('used', run_count, 'limit', run_limit, 'month', ${month}::text)
       FROM usage
       WHERE run_count * 100 >= run_limit * warning_percent
       ON CONFLICT (tenant_id, owner_id, dedupe_key) DO NOTHING

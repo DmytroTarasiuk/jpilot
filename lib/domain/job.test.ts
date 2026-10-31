@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { canonicalizeJobUrl, normalizeVacancy, scoreVacancy } from "./job";
+import {
+  canonicalizeJobUrl,
+  MATCH_PROPOSAL_THRESHOLD,
+  normalizeVacancy,
+  scoreVacancy,
+} from "./job";
 
 const source = {
   platform: "djinni" as const,
@@ -49,7 +54,8 @@ describe("job normalization and deterministic matching", () => {
 
     expect(result.eligible).toBe(true);
     expect(result.shouldPropose).toBe(true);
-    expect(result.score).toBeGreaterThanOrEqual(55);
+    expect(MATCH_PROPOSAL_THRESHOLD).toBe(72);
+    expect(result.score).toBeGreaterThanOrEqual(MATCH_PROPOSAL_THRESHOLD);
     expect(result.reasons.join(" ")).toMatch(/Poland|target title|Profile overlap/);
     expect(result.hardFilterFailures).toEqual([]);
   });
@@ -76,5 +82,60 @@ describe("job normalization and deterministic matching", () => {
     expect(result.hardFilterFailures).toEqual(
       expect.arrayContaining(["outside_run_window", "older_than_seven_days"]),
     );
+  });
+
+  it("does not propose a generic title match without active-CV skill overlap", () => {
+    const result = scoreVacancy({
+      vacancy: normalizeVacancy({
+        ...source,
+        title: "Senior Software Engineer",
+        descriptionHtml: "<p>Remote automotive role using C++, AUTOSAR and embedded Linux.</p>",
+        categories: ["Automotive", "C++"],
+      }),
+      profile: {
+        headline: "Senior Software Engineer",
+        targetCountries: ["PL"],
+        targetTitles: ["Senior Software Engineer"],
+        workModes: ["remote"],
+        languages: ["English"],
+        excludedCompanies: [],
+        salaryMin: null,
+        cvText: "TypeScript Node.js PostgreSQL AWS distributed web systems",
+      },
+      windowStart: new Date("2026-10-24T00:00:00.000Z"),
+      windowEnd: new Date("2026-10-25T00:00:00.000Z"),
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(MATCH_PROPOSAL_THRESHOLD);
+    expect(result.eligible).toBe(true);
+    expect(result.shouldPropose).toBe(false);
+    expect(result.concerns).toContain("No skill or technology overlap was found in the active CV.");
+  });
+
+  it("keeps eligible jobs below 72 percent out of proposals", () => {
+    const result = scoreVacancy({
+      vacancy: normalizeVacancy({
+        ...source,
+        title: "Software Specialist",
+        descriptionHtml: "<p>Remote TypeScript role.</p>",
+        categories: ["TypeScript"],
+      }),
+      profile: {
+        headline: "Senior Software Engineer",
+        targetCountries: ["PL"],
+        targetTitles: ["Senior Backend Engineer"],
+        workModes: ["remote"],
+        languages: ["English"],
+        excludedCompanies: [],
+        salaryMin: null,
+        cvText: "TypeScript Node.js PostgreSQL AWS",
+      },
+      windowStart: new Date("2026-10-24T00:00:00.000Z"),
+      windowEnd: new Date("2026-10-25T00:00:00.000Z"),
+    });
+
+    expect(result.eligible).toBe(true);
+    expect(result.score).toBeLessThan(MATCH_PROPOSAL_THRESHOLD);
+    expect(result.shouldPropose).toBe(false);
   });
 });
